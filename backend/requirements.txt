@@ -1,0 +1,15 @@
+# ── Web framework ──────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.31.0
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# ── Quantum stack ──────────────────────────────────────────────────────────
+# These two share a hugr dependency — pin together to avoid conflicts
+guppylang==0.21.11
+selene-sim==0.2.13
+
+# ── Testing ────────────────────────────────────────────────────────────────
+httpx>=0.27.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

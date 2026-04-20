@@ -1,0 +1,46 @@
+/* ── DESIGN TOKENS ─────────────────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-base:        #0d1117;
+  --bg-surface:     #161b22;
+  --bg-raised:      #1c2330;
+  --bg-hover:       #222a38;
+
+  /* Borders */
+  --border:         #2a3444;
+  --border-bright:  #3a4a60;
+
+  /* Quantinuum Brand */
+  --navy:           #0a1628;
+  --teal:           #00b4d8;
+  --teal-dim:       #0090ae;
+  --teal-glow:      rgba(0, 180, 216, 0.12);
+  --teal-subtle:    rgba(0, 180, 216, 0.06);
+
+  /* Text */
+  --text-primary:   #e6edf3;
+  --text-secondary: #8b98a8;
+  --text-muted:     #4d5d70;
+  --text-teal:      #00b4d8;
+
+  /* Semantic */
+  --green:          #3fb950;
+  --yellow:         #d29922;
+  --red:            #f85149;
+  --orange:         #e8712a;
+
+  /* Typography */
+  --font-mono:      'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-ui:        'DM Sans', system-ui, sans-serif;
+
+  /* Radii */
+  --radius-sm:      4px;
+  --radius:         6px;
+  --radius-lg:      8px;
+
+  /* Layout */
+  --header-h:       48px;
+  --toolbar-h:      40px;
+  --sidebar-w:      220px;
+  --output-w:       420px;
+}
