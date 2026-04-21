@@ -1,9 +1,8 @@
 from __future__ import annotations
 import uuid
 from fastapi import APIRouter
-from ..models import RunRequest, RunResponse, RunStatus, CompileSuccess
-from ..compiler import compile_source
-from ..simulator import simulate
+from ..models import RunRequest, RunResponse, RunStatus
+from ..compiler import compile_and_simulate
 
 router = APIRouter()
 
@@ -12,37 +11,26 @@ router = APIRouter()
 async def run_endpoint(req: RunRequest) -> RunResponse:
     request_id = str(uuid.uuid4())[:8]
 
-    # ── Step 1: Compile ──────────────────────────────────────────────────
-    compile_result = await compile_source(req.source, req.entry_point)
+    result = await compile_and_simulate(
+        source=req.source,
+        shots=req.shots,
+        simulator=req.simulator,
+        seed=req.seed,
+        entry_point=req.entry_point,
+    )
 
-    if isinstance(compile_result, list):
-        # compile_source returns list[CompileError] on failure
+    # compile_and_simulate returns list[CompileError] on any failure
+    if isinstance(result, list):
         return RunResponse(
             status=RunStatus.compile_error,
-            errors=compile_result,
+            errors=result,
             request_id=request_id,
         )
 
-    # ── Step 2: Simulate ─────────────────────────────────────────────────
-    try:
-        results = await simulate(
-            hugr_json=compile_result.hugr_json,
-            shots=req.shots,
-            simulator=req.simulator,
-            seed=req.seed,
-        )
-    except TimeoutError:
-        return RunResponse(status=RunStatus.timeout, request_id=request_id)
-    except Exception as exc:
-        return RunResponse(
-            status=RunStatus.internal_error,
-            message=str(exc)[:300],
-            request_id=request_id,
-        )
-
+    compile_ok, sim_ok = result
     return RunResponse(
         status=RunStatus.ok,
-        compile=compile_result,
-        results=results,
+        compile=compile_ok,
+        results=sim_ok,
         request_id=request_id,
     )

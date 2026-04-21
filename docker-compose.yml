@@ -17,15 +17,23 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
     volumes:
-      # Hot-reload app code in development (remove for production)
+      # Hot-reload in dev — remove this volume mount for production builds
       - ./backend/app:/app/app:ro
+
+    # mem_limit is the correct key for plain `docker compose` (non-Swarm).
+    # deploy.resources.limits is Swarm-only and silently ignored here.
+    # Statevector sim cap is 20 qubits = 16 MB; 1 GB covers the Python
+    # process, two uvicorn workers, and subprocess overhead with room to spare.
+    mem_limit: 1g
+    memswap_limit: 1g        # disables swap so OOM kills cleanly instead of thrashing
+
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
-      start_period: 15s
+      start_period: 20s      # guppylang import on first startup takes a few seconds
       retries: 3
 
   # ── Astro frontend (dev mode) ────────────────────────────────────────────
@@ -36,11 +44,12 @@ services:
       - "4321:4321"
     volumes:
       - .:/app
-      - /app/node_modules      # anonymous volume prevents host overwrite
+      - /app/node_modules    # anonymous volume — prevents host node_modules overwrite
     environment:
       PUBLIC_API_URL: "http://localhost:8000"
     command: >
       sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 4321"
+    mem_limit: 512m
     depends_on:
       backend:
         condition: service_healthy

@@ -1,25 +1,24 @@
 from __future__ import annotations
 from enum import Enum
-from typing import Any
 from pydantic import BaseModel, Field
 
 
 # ── Request ────────────────────────────────────────────────────────────────
 
 class SimulatorBackend(str, Enum):
-    stabilizer  = "stabilizer"   # Stim — fast, Clifford-only
-    statevector = "statevector"  # QuEST — exact, general
+    stabilizer  = "stabilizer"   # Stim — fast, works with any circuit
+    statevector = "statevector"  # QuEST — exact amplitudes, max 20 qubits
 
 
 class RunRequest(BaseModel):
     source:      str
-    entry_point: str | None = None       # inferred if None
-    shots:       int         = Field(1024, ge=1, le=8192)
+    entry_point: str | None = None       # inferred from @guppy fn if None
+    shots:       int        = Field(1024, ge=1, le=8192)
     simulator:   SimulatorBackend = SimulatorBackend.stabilizer
-    seed:        int | None  = None
+    seed:        int | None = None
 
 
-# ── Compile models ────────────────────────────────────────────────────────
+# ── Compile output ─────────────────────────────────────────────────────────
 
 class ErrorKind(str, Enum):
     linearity_error = "linearity_error"
@@ -52,25 +51,18 @@ class HugrNode(BaseModel):
 
 
 class CompileSuccess(BaseModel):
-    hugr_json:    str                    # raw JSON string — passed directly to simulate worker
-    hugr_nodes:   list[HugrNode]
-    node_count:   int
-    warnings:     list[CompileWarning] = []
+    hugr_nodes:      list[HugrNode]
+    node_count:      int
+    qubit_count:     int = 2
+    warnings:        list[CompileWarning] = []
     compile_time_ms: int
 
 
-# ── Simulation models ──────────────────────────────────────────────────────
-
-class StatevectorEntry(BaseModel):
-    amplitude: tuple[float, float]
-    basis:     str
-
+# ── Simulation output ──────────────────────────────────────────────────────
 
 class SimulationResults(BaseModel):
-    counts:              dict[str, int]
-    expectation_values:  dict[str, float] | None = None
-    statevector:         list[StatevectorEntry] | None = None
-    simulate_time_ms:    int
+    counts:           dict[str, int]
+    simulate_time_ms: int
 
 
 # ── Run response ───────────────────────────────────────────────────────────
@@ -79,18 +71,16 @@ class RunStatus(str, Enum):
     ok             = "ok"
     compile_error  = "compile_error"
     timeout        = "timeout"
-    rate_limited   = "rate_limited"
     internal_error = "internal_error"
 
 
 class RunResponse(BaseModel):
-    status:          RunStatus
-    compile:         CompileSuccess | None = None
-    results:         SimulationResults | None = None
-    errors:          list[CompileError] | None = None
-    message:         str | None = None
-    retry_after_ms:  int | None = None
-    request_id:      str | None = None
+    status:      RunStatus
+    compile:     CompileSuccess | None = None
+    results:     SimulationResults | None = None
+    errors:      list[CompileError] | None = None
+    message:     str | None = None
+    request_id:  str | None = None
 
 
 # ── Examples ───────────────────────────────────────────────────────────────
@@ -113,7 +103,7 @@ class ExamplesResponse(BaseModel):
 # ── Health ─────────────────────────────────────────────────────────────────
 
 class HealthResponse(BaseModel):
-    status:             str        # "ok" | "degraded"
-    guppylang_version:  str
-    selene_version:     str
-    uptime_seconds:     float
+    status:            str    # "ok" | "degraded"
+    guppylang_version: str
+    selene_version:    str
+    uptime_seconds:    float

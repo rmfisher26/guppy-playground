@@ -1,15 +1,17 @@
 """
-Sandboxed compile worker — runs as a subprocess.
+Sandboxed worker — compile AND simulate in one subprocess.
 
 Reads JSON from stdin:
-  { "source": "...", "entry_point": "..." | null }
+  { "source": "...", "shots": 1024, "simulator": "stabilizer"|"statevector",
+    "seed": int|null }
 
 Writes JSON to stdout:
-  { "status": "ok",    "hugr_json": "...(JSON string)...",
-    "hugr_nodes": [...], "warnings": [] }
+  { "status": "ok", "counts": {...}, "hugr_nodes": [...], "warnings": [] }
   { "status": "error", "errors": [...] }
 
-This is the ONLY file that imports guppylang directly.
+This is the ONLY file that imports guppylang and selene_sim.
+The compile+simulate in one process avoids the selene daemon connection
+issue that occurs when build() is called from a fresh subprocess.
 """
 from __future__ import annotations
 
@@ -21,78 +23,140 @@ import sys
 import tempfile
 import traceback
 
+MAX_QUBITS_STATEVECTOR = 20   # 2^20 * 16B = 16MB — safe in container
+MAX_QUBITS_STABILIZER  = 50
 
-# ── Error parsing ──────────────────────────────────────────────────────────
 
-def parse_guppy_errors(exc: Exception, tb_str: str) -> list[dict]:
-    """Extract structured error info from a guppylang exception."""
-    msg = str(exc)
-    combined = msg + "\n" + tb_str
+def main() -> None:
+    payload    = json.loads(sys.stdin.read())
+    source: str       = payload["source"]
+    shots: int        = payload.get("shots", 1024)
+    simulator: str    = payload.get("simulator", "stabilizer")
+    seed: int | None  = payload.get("seed")
 
-    # Try to find a line number
-    line = 1
-    for pattern in [r"line (\d+)", r":(\d+):"]:
-        m = re.search(pattern, combined)
-        if m:
-            line = int(m.group(1))
+    tmpfile = tempfile.NamedTemporaryFile(
+        suffix=".py", mode="w", delete=False, prefix="guppy_user_"
+    )
+    tmppath = tmpfile.name
+    try:
+        tmpfile.write(source)
+        tmpfile.close()
+        _run(tmppath, shots, simulator, seed)
+    except Exception as exc:
+        tb_str = traceback.format_exc()
+        errors = _parse_errors(exc, tb_str)
+        print(json.dumps({"status": "error", "errors": errors}))
+    finally:
+        try:
+            os.unlink(tmppath)
+        except Exception:
+            pass
+
+
+def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
+    from guppylang.defs import GuppyFunctionDefinition
+
+    spec = importlib.util.spec_from_file_location("_guppy_user", tmppath)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load {tmppath}")
+
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+    except SystemExit:
+        pass
+
+    # Find the first compilable @guppy function
+    guppy_fn = None
+    for attr in dir(module):
+        obj = getattr(module, attr, None)
+        if isinstance(obj, GuppyFunctionDefinition):
+            guppy_fn = obj
             break
 
-    # Classify error kind from message content
-    msg_lower = msg.lower()
-    if any(k in msg_lower for k in ("linear", "qubit", "owned", "borrow", "drop", "no-cloning")):
-        kind = "linearity_error"
-    elif any(k in msg_lower for k in ("type", "expected", "got", "annotation", "argument")):
-        kind = "type_error"
-    elif any(k in msg_lower for k in ("syntax", "invalid syntax", "unexpected token")):
-        kind = "syntax_error"
-    elif any(k in msg_lower for k in ("name", "not defined", "undefined", "unresolved")):
-        kind = "name_error"
+    if guppy_fn is None:
+        # No @guppy function found — check() was called, no simulation needed
+        print(json.dumps({
+            "status":     "ok",
+            "counts":     {},
+            "hugr_nodes": _infer_nodes(open(tmppath).read() if os.path.exists(tmppath) else ""),
+            "warnings":   [],
+            "qubit_count": 0,
+        }))
+        return
+
+    # ── Qubit count ──────────────────────────────────────────────────────
+    n_qubits = _infer_qubit_count_from_source(
+        open(tmppath).read() if os.path.exists(tmppath) else ""
+    )
+
+    # ── Guard ────────────────────────────────────────────────────────────
+    if simulator == "statevector" and n_qubits > MAX_QUBITS_STATEVECTOR:
+        raise ValueError(
+            f"Statevector needs 2^n memory: {n_qubits} qubits ≈ "
+            f"{2**n_qubits * 16 // (1024**2)}MB. "
+            f"Max is {MAX_QUBITS_STATEVECTOR}. Use Stabilizer instead."
+        )
+    if n_qubits > MAX_QUBITS_STABILIZER:
+        raise ValueError(f"{n_qubits} qubits exceeds playground limit of {MAX_QUBITS_STABILIZER}.")
+
+    # ── Compile HUGR nodes for display ───────────────────────────────────
+    hugr_nodes: list[dict] = []
+    warnings: list[dict]   = []
+    try:
+        pkg = guppy_fn.compile()
+        hugr_str = pkg.to_str()
+        hugr_nodes = _extract_nodes(hugr_str)
+    except Exception:
+        hugr_nodes = _infer_nodes(open(tmppath).read() if os.path.exists(tmppath) else "")
+
+    # ── Simulate via guppylang emulator API ──────────────────────────────
+    emulator = guppy_fn.emulator(n_qubits=n_qubits).with_shots(shots)
+    if seed is not None:
+        emulator = emulator.with_seed(seed)
+
+    if simulator == "statevector":
+        emulator = emulator.statevector_sim()
     else:
-        kind = "internal_error"
+        emulator = emulator.stabilizer_sim()
 
-    # Clean up the message — strip internal class names and truncate
-    # e.g. "AlreadyUsedError(...)" → "Qubit 'q' used after it was already consumed"
-    clean = _clean_error_message(msg)
+    result = emulator.run()
 
-    return [{"message": clean[:300], "line": line, "col": 0, "kind": kind}]
+    # Aggregate shot entries into bitstring counts
+    counts: dict[str, int] = {}
+    for shot in result.results:
+        key = "".join(str(int(v)) for _, v in shot.entries)
+        counts[key] = counts.get(key, 0) + 1
 
-
-def _clean_error_message(msg: str) -> str:
-    """Produce a developer-friendly error string from guppylang internals."""
-    # Already-used qubit errors
-    if "AlreadyUsed" in msg:
-        m = re.search(r"place=Variable\(name='(\w+)'", msg)
-        var = m.group(1) if m else "qubit"
-        return f"Linearity error: '{var}' has already been used or consumed"
-
-    # Not-used qubit errors  
-    if "NotUsed" in msg or "DropError" in msg:
-        m = re.search(r"place=Variable\(name='(\w+)'", msg)
-        var = m.group(1) if m else "qubit"
-        return f"Linearity error: '{var}' was never measured or discarded"
-
-    # Type errors — strip internal repr noise
-    if "TypeError" in msg or "type" in msg.lower():
-        first_line = msg.split("\n")[0].strip()
-        return re.sub(r"<[^>]+>", "", first_line).strip()
-
-    # Default: return first non-empty line, cleaned of internal paths
-    first = next((l.strip() for l in msg.splitlines() if l.strip()), msg)
-    # Strip temp file names like "guppy_user_abc123.py"
-    first = re.sub(r"guppy_user_\w+\.py", "your_program.py", first)
-    return first
+    print(json.dumps({
+        "status":      "ok",
+        "counts":      counts,
+        "hugr_nodes":  hugr_nodes,
+        "warnings":    warnings,
+        "qubit_count": n_qubits,
+    }))
 
 
-# ── HUGR node extraction ───────────────────────────────────────────────────
+def _infer_qubit_count_from_source(source: str) -> int:
+    """Count qubit() calls + array sizes to estimate circuit width."""
+    # Count explicit qubit() calls
+    individual = len(re.findall(r'\bqubit\(\)', source))
+    # Count array(qubit() for _ in range(N)) patterns
+    array_total = sum(int(m) for m in re.findall(r'range\((\d+)\)', source))
+    total = individual + array_total
+    return max(total, 2)
 
-def extract_hugr_nodes(hugr_json: dict) -> list[dict]:
-    """
-    Walk a HUGR JSON object and produce a flat list of display nodes.
-    HUGR's exact schema evolves — this is best-effort for the UI.
-    """
+
+def _extract_nodes(hugr_str: str) -> list[dict]:
+    """Extract display nodes from HUGR envelope string."""
+    try:
+        json_start = hugr_str.index('{')
+        data = json.loads(hugr_str[json_start:])
+    except (ValueError, json.JSONDecodeError):
+        return []
+
     nodes: list[dict] = []
     nid = [0]
-
     type_map = {
         "DFG": "DFG", "FuncDefn": "FuncDef", "FuncDecl": "FuncDef",
         "Call": "Call", "H": "Gate", "CX": "Gate", "CZ": "Gate",
@@ -105,162 +169,89 @@ def extract_hugr_nodes(hugr_json: dict) -> list[dict]:
     def walk(obj: dict, depth: int) -> None:
         op   = obj.get("op", obj.get("type", "Unknown"))
         name = obj.get("name", op)
-        meta = ""
-
-        if "signature" in obj:
-            sig = obj["signature"]
-            ins  = sig.get("input",  {}).get("types", [])
-            outs = sig.get("output", {}).get("types", [])
-            if ins or outs:
-                meta = f"{ins} → {outs}"
-
         nodes.append({
-            "id":     str(nid[0]),
-            "type":   type_map.get(op, "Call"),
-            "name":   name,
-            "meta":   meta,
-            "parent": None,
-            "depth":  depth,
+            "id": str(nid[0]), "type": type_map.get(op, "Call"),
+            "name": name, "meta": "", "parent": None, "depth": depth,
         })
         nid[0] += 1
-
         for child in obj.get("children", []):
             if isinstance(child, dict):
                 walk(child, depth + 1)
 
-    for n in hugr_json.get("nodes", []):
+    for n in data.get("modules", [{}])[0].get("nodes", []):
         if isinstance(n, dict):
             walk(n, 0)
-    if not nodes and "op" in hugr_json:
-        walk(hugr_json, 0)
-
     return nodes
 
 
-# ── Source-level fallback ──────────────────────────────────────────────────
-
-def infer_nodes_from_source(source: str) -> list[dict]:
-    """
-    Approximate HUGR node list derived purely from source analysis.
-    Used when real HUGR extraction is unavailable.
-    """
+def _infer_nodes(source: str) -> list[dict]:
+    """Fallback: approximate nodes from source analysis."""
     nodes: list[dict] = []
     nid = [0]
 
-    def add(type_: str, name: str, meta: str, depth: int) -> None:
+    def add(type_: str, name: str, depth: int) -> None:
         nodes.append({"id": str(nid[0]), "type": type_, "name": name,
-                       "meta": meta, "depth": depth, "parent": None})
+                       "meta": "", "depth": depth, "parent": None})
         nid[0] += 1
 
-    gate_ops    = {"h", "cx", "cz", "x", "y", "z", "s", "t", "toffoli",
-                   "rx", "ry", "rz", "ch", "swap"}
-    measure_ops = {"measure", "measure_array"}
+    gate_ops    = {"h","cx","cz","x","y","z","s","t","toffoli","rx","ry","rz"}
+    measure_ops = {"measure","measure_array"}
 
-    add("DFG", "module", "root", 0)
-
-    fn_pat = re.compile(
-        r"@guppy(?:\.[^\n]*)?\ndef\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^:]+):",
-        re.MULTILINE,
-    )
+    add("DFG", "module", 0)
+    fn_pat = re.compile(r"@guppy(?:\.[^\n]*)?\ndef\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^:]+):", re.MULTILINE)
 
     for m in fn_pat.finditer(source):
-        fn_name = m.group(1)
-        fn_args = m.group(2).strip()
-        fn_ret  = m.group(3).strip()
-        add("FuncDef", fn_name, f"({fn_args}) → {fn_ret}", 1)
-
+        add("FuncDef", f"{m.group(1)}({m.group(2).strip()}) → {m.group(3).strip()}", 1)
         start   = m.end()
         next_fn = fn_pat.search(source, start)
         body    = source[start: next_fn.start() if next_fn else len(source)]
-
         seen: set[str] = set()
-        for call_m in re.finditer(r"\b(\w+)\s*\(", body):
-            op = call_m.group(1).lower()
+        for call in re.finditer(r"\b(\w+)\s*\(", body):
+            op = call.group(1).lower()
             if op in gate_ops and op not in seen:
-                add("Gate", op.upper(), "", 2)
-                seen.add(op)
+                add("Gate", op.upper(), 2); seen.add(op)
             elif op in measure_ops and op not in seen:
-                add("Measure", op, "→ bool", 2)
-                seen.add(op)
-
+                add("Measure", op, 2); seen.add(op)
     return nodes
 
 
-# ── Main ───────────────────────────────────────────────────────────────────
+def _parse_errors(exc: Exception, tb_str: str) -> list[dict]:
+    msg      = str(exc)
+    combined = msg + "\n" + tb_str
 
-def main() -> None:
-    payload     = json.loads(sys.stdin.read())
-    source: str = payload["source"]
+    line = 1
+    for pat in [r"line (\d+)", r":(\d+):"]:
+        m = re.search(pat, combined)
+        if m:
+            line = int(m.group(1))
+            break
 
-    # Write source to a real file — guppylang uses inspect.getsourcelines()
-    # which requires a file on disk (not -c or exec'd strings)
-    tmpfile = tempfile.NamedTemporaryFile(
-        suffix=".py", mode="w", delete=False, prefix="guppy_user_"
-    )
-    tmppath = tmpfile.name
-    try:
-        tmpfile.write(source)
-        tmpfile.close()
+    msg_lower = msg.lower()
+    if any(k in msg_lower for k in ("linear","qubit","owned","borrow","drop","already")):
+        kind = "linearity_error"
+    elif any(k in msg_lower for k in ("type","expected","got","annotation")):
+        kind = "type_error"
+    elif any(k in msg_lower for k in ("syntax","invalid syntax")):
+        kind = "syntax_error"
+    elif any(k in msg_lower for k in ("name","not defined","undefined")):
+        kind = "name_error"
+    else:
+        kind = "internal_error"
 
-        spec = importlib.util.spec_from_file_location("_guppy_user", tmppath)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Could not create module spec for {tmppath}")
+    display = _clean_message(msg)
+    return [{"message": display[:300], "line": line, "col": 0, "kind": kind}]
 
-        module = importlib.util.module_from_spec(spec)
 
-        hugr_json_str = "{}"
-        hugr_nodes: list[dict] = []
-        warnings: list[dict]   = []
-
-        try:
-            spec.loader.exec_module(module)  # type: ignore[union-attr]
-        except SystemExit:
-            pass  # Some examples call sys.exit() — treat as success
-
-        # Walk module attrs for GuppyFunctionDefinition objects and compile them
-        try:
-            from guppylang.defs import GuppyFunctionDefinition
-            from hugr.package import Package
-            for attr_name in dir(module):
-                obj = getattr(module, attr_name, None)
-                if isinstance(obj, GuppyFunctionDefinition):
-                    try:
-                        pkg = obj.compile()
-                        # Use modern HUGR envelope API (to_str/from_str)
-                        hugr_json_str = pkg.to_str()
-                        # Try to extract nodes from the JSON form for display
-                        try:
-                            hugr_dict = json.loads(pkg.to_json())
-                            hugr_nodes = extract_hugr_nodes(hugr_dict)
-                        except Exception:
-                            hugr_nodes = infer_nodes_from_source(source)
-                        break
-                    except Exception:
-                        pass
-        except ImportError:
-            pass
-
-        # Fall back to source-level analysis if HUGR extraction produced nothing
-        if not hugr_nodes:
-            hugr_nodes = infer_nodes_from_source(source)
-
-        print(json.dumps({
-            "status":     "ok",
-            "hugr_json":  hugr_json_str,   # string — passed to simulate worker
-            "hugr_nodes": hugr_nodes,
-            "warnings":   warnings,
-        }))
-
-    except Exception as exc:
-        tb_str = traceback.format_exc()
-        errors = parse_guppy_errors(exc, tb_str)
-        print(json.dumps({"status": "error", "errors": errors}))
-
-    finally:
-        try:
-            os.unlink(tmppath)
-        except Exception:
-            pass
+def _clean_message(msg: str) -> str:
+    if "AlreadyUsed" in msg:
+        m = re.search(r"place=Variable\(name='(\w+)'", msg)
+        return f"Linearity error: '{m.group(1) if m else 'qubit'}' already used or consumed"
+    if "NotUsed" in msg or "DropError" in msg or "leaked" in msg.lower():
+        m = re.search(r"Variable `(\w+)`", msg) or re.search(r"place=Variable\(name='(\w+)'", msg)
+        return f"Linearity error: '{m.group(1) if m else 'qubit'}' was never measured or discarded"
+    first = next((l.strip() for l in msg.splitlines() if l.strip()), msg)
+    first = re.sub(r"guppy_user_\w+\.py", "your_program.py", first)
+    return first
 
 
 if __name__ == "__main__":
