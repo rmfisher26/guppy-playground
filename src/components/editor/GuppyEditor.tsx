@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { EditorState, StateEffect, StateField, RangeSet } from '@codemirror/state';
-import { EditorView, Decoration, DecorationSet, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
+import { EditorView, Decoration, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
+import type { DecorationSet } from '@codemirror/view';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { python } from '@codemirror/lang-python';
 import { oneDark } from '@codemirror/theme-one-dark';

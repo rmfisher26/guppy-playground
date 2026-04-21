@@ -24,7 +24,7 @@ COPY --from=builder /install /usr/local
 COPY app/ ./app/
 
 # Non-root user for security
-RUN useradd --no-create-home --shell /bin/false guppy
+RUN useradd --create-home --shell /bin/false guppy  && chown -R guppy:guppy /app
 USER guppy
 
 ENV PYTHONUNBUFFERED=1 \
