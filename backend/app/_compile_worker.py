@@ -66,9 +66,11 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
     except SystemExit:
         pass
 
-    # Find the first compilable @guppy function
+    # Prefer a function named 'main' as the emulator entry point.
+    # The guppylang emulator requires an entry function that takes no arguments.
+    # If the user hasn't written main(), fall back to the first @guppy function.
     guppy_fn = None
-    for attr in dir(module):
+    for attr in ("main", *dir(module)):
         obj = getattr(module, attr, None)
         if isinstance(obj, GuppyFunctionDefinition):
             guppy_fn = obj
@@ -120,12 +122,34 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
     else:
         emulator = emulator.stabilizer_sim()
 
-    result = emulator.run()
+    try:
+        result = emulator.run()
+    except Exception as exc:
+        msg = str(exc)
+        # Non-Clifford gates (T, Toffoli, Rz) can't run on stabilizer simulator.
+        # Automatically retry with statevector if stabilizer fails with this error.
+        if simulator == "stabilizer" and (
+            "not representable in stabiliser form" in msg
+            or "RXY" in msg
+            or "Clifford" in msg
+        ):
+            emulator_sv = guppy_fn.emulator(n_qubits=n_qubits).with_shots(shots)
+            if seed is not None:
+                emulator_sv = emulator_sv.with_seed(seed)
+            result = emulator_sv.statevector_sim().run()
+        else:
+            raise
 
     # Aggregate shot entries into bitstring counts
     counts: dict[str, int] = {}
     for shot in result.results:
-        key = "".join(str(int(v)) for _, v in shot.entries)
+        parts = []
+        for _, v in shot.entries:
+            if isinstance(v, list):
+                parts.append("".join(str(int(b)) for b in v))
+            else:
+                parts.append(str(int(v)))
+        key = "".join(parts)
         counts[key] = counts.get(key, 0) + 1
 
     print(json.dumps({
