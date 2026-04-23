@@ -4,7 +4,7 @@ import { useRun } from '../hooks/useRun';
 import { encodeShareUrl } from '../../lib/api';
 
 export default function Toolbar() {
-  const { shots, setShots, simulator, setSimulator, runState, examples, activeExampleId, setActiveExample, setSource, setModified, showToast } = usePlaygroundStore();
+  const { shots, setShots, simulator, setSimulator, runState, examples, activeSlot, activeExampleId, setActiveExample, showToast } = usePlaygroundStore();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
@@ -67,10 +67,14 @@ export default function Toolbar() {
       {/* Example picker */}
       <SelectWrap>
         <select
-          style={selectStyle}
-          value={activeExampleId}
+          style={{
+            ...selectStyle,
+            color: activeSlot !== 'workspace' ? 'var(--text-secondary)' : 'var(--text-muted)',
+          }}
+          value={activeSlot === 'workspace' ? '' : activeExampleId}
           onChange={e => handleExampleChange(e.target.value)}
         >
+          <option value="">— examples —</option>
           {examples.map(ex => (
             <option key={ex.id} value={ex.id}>{ex.title}</option>
           ))}

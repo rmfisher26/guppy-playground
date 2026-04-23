@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import type { RunState, OutputTab, Example, CompileError } from './types';
+import { DEFAULT_SOURCE } from './defaultSource';
+
+// The active "slot" in the editor — either 'workspace' or an example id
+export type ActiveSlot = 'workspace' | string;
 
 interface PlaygroundStore {
   // Editor
@@ -7,6 +11,11 @@ interface PlaygroundStore {
   setSource: (src: string) => void;
   isModified: boolean;
   setModified: (v: boolean) => void;
+
+  // Workspace — persists the user's own code independently of examples
+  workspaceSource: string;
+  saveWorkspace: () => void;          // snapshot current source → workspaceSource
+  restoreWorkspace: () => void;       // load workspaceSource → source
 
   // Config
   shots: number;
@@ -16,9 +25,15 @@ interface PlaygroundStore {
   seed: number | undefined;
   setSeed: (n: number | undefined) => void;
 
+  // Active slot — 'workspace' or an example id
+  activeSlot: ActiveSlot;
+  setActiveSlot: (slot: ActiveSlot) => void;
+
   // Examples
   examples: Example[];
   setExamples: (e: Example[]) => void;
+
+  // Derived — kept for toolbar compat
   activeExampleId: string;
   setActiveExample: (id: string) => void;
 
@@ -39,11 +54,18 @@ interface PlaygroundStore {
   hideToast: () => void;
 }
 
-export const usePlaygroundStore = create<PlaygroundStore>((set) => ({
-  source: '',
+export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
+  source: DEFAULT_SOURCE,
   setSource: (source) => set({ source, isModified: true }),
   isModified: false,
   setModified: (isModified) => set({ isModified }),
+
+  workspaceSource: DEFAULT_SOURCE,
+  saveWorkspace: () => set((s) => ({ workspaceSource: s.source })),
+  restoreWorkspace: () => {
+    const { workspaceSource } = get();
+    set({ source: workspaceSource, activeSlot: 'workspace', activeExampleId: '', isModified: false });
+  },
 
   shots: 1024,
   setShots: (shots) => set({ shots }),
@@ -52,10 +74,24 @@ export const usePlaygroundStore = create<PlaygroundStore>((set) => ({
   seed: undefined,
   setSeed: (seed) => set({ seed }),
 
+  activeSlot: 'workspace',
+  setActiveSlot: (activeSlot) => set({ activeSlot }),
+
   examples: [],
   setExamples: (examples) => set({ examples }),
+
+  // activeExampleId mirrors activeSlot for toolbar compat
   activeExampleId: '',
-  setActiveExample: (activeExampleId) => set({ activeExampleId }),
+  setActiveExample: (id: string) => {
+    const { examples, source, activeSlot } = get();
+    const ex = examples.find(e => e.id === id);
+    if (!ex) return;
+    // Save workspace before leaving it
+    if (activeSlot === 'workspace') {
+      set({ workspaceSource: source });
+    }
+    set({ activeExampleId: id, activeSlot: id, source: ex.source, isModified: false });
+  },
 
   runState: { status: 'idle' },
   setRunState: (runState) => {

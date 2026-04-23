@@ -1,11 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import GuppyEditor from './GuppyEditor';
 
 export default function EditorPane() {
-  const { activeExampleId, examples, isModified } = usePlaygroundStore();
-  const activeExample = examples.find(e => e.id === activeExampleId);
-  const filename = activeExample ? activeExample.id.replace(/-/g, '_') + '.py' : 'main.py';
+  const { activeSlot, examples, isModified, source, saveWorkspace } = usePlaygroundStore();
+
+  const activeExample = examples.find(e => e.id === activeSlot);
+
+  // Derive filename
+  const filename = activeSlot === 'workspace'
+    ? 'main.py'
+    : activeExample
+      ? activeExample.id.replace(/-/g, '_') + '.py'
+      : 'main.py';
+
+  // Auto-save workspace source whenever source changes while in workspace slot
+  useEffect(() => {
+    if (activeSlot === 'workspace') {
+      saveWorkspace();
+    }
+  }, [source, activeSlot]);
 
   return (
     <div style={{
@@ -22,16 +36,26 @@ export default function EditorPane() {
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
           {filename}
         </span>
-        {/* Modified dot */}
-        <div style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: 'var(--yellow)',
-          opacity: isModified ? 1 : 0,
-          transition: 'opacity 0.2s',
-        }} />
+
+        {/* Modified dot — only show when viewing an example that's been changed */}
+        {activeSlot !== 'workspace' && (
+          <div style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: 'var(--yellow)',
+            opacity: isModified ? 1 : 0,
+            transition: 'opacity 0.2s',
+          }} />
+        )}
+
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Guppy
+
+        {/* Slot badge */}
+        <span style={{
+          fontSize: 10,
+          color: activeSlot === 'workspace' ? 'var(--teal)' : 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          {activeSlot === 'workspace' ? 'workspace' : 'example'}
         </span>
       </div>
 
