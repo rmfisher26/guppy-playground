@@ -73,13 +73,8 @@ function TerminalContent({ state }: { state: RunState }) {
         <Line color="var(--text-muted)">  guppylang → HUGR IR</Line>
         <Blank />
         {state.errors.map((err, i) => (
-          <div key={i}>
-            <Line color="var(--red)">✗ {err.kind}: {err.message}</Line>
-            <Line color="var(--text-muted)">  → line {err.line}{err.col ? `, col ${err.col}` : ''}</Line>
-          </div>
+          <PrettyError key={i} message={err.message} />
         ))}
-        <Blank />
-        <Line color="var(--text-muted)">  Compilation failed — check highlighted lines in editor</Line>
       </>
     );
   }
@@ -141,3 +136,72 @@ function SpinnerLine({ label }: { label: string }) {
     </div>
   );
 }
+
+// ── PrettyError ────────────────────────────────────────────────────────────
+// Renders the multi-line pretty-printed guppylang error output.
+// Each line gets coloured based on its role in the error display.
+function PrettyError({ message }: { message: string }) {
+  const lines = message.split('\n');
+
+  return (
+    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.8 }}>
+      {lines.map((line, i) => {
+        // "Error: ..." header line
+        if (line.startsWith('Error:')) {
+          return (
+            <div key={i} style={{ color: 'var(--red)', fontWeight: 600, marginBottom: 4 }}>
+              {line.replace('$FILE', 'your_program.py')}
+            </div>
+          );
+        }
+        // Pointer line with carets "  |   ^^^"
+        if (/^\s+\|\s+\^/.test(line)) {
+          const [pipe, ...rest] = line.split('|');
+          const annotation = rest.join('|');
+          // Split carets from label text
+          const caretMatch = annotation.match(/^(\s*)(\^+)(.*)/);
+          if (caretMatch) {
+            return (
+              <div key={i} style={{ display: 'flex', color: 'var(--text-muted)' }}>
+                <span style={{ whiteSpace: 'pre' }}>{pipe}|</span>
+                <span style={{ whiteSpace: 'pre', color: 'var(--yellow)' }}>
+                  {caretMatch[1]}{caretMatch[2]}
+                </span>
+                <span style={{ color: 'var(--text-secondary)' }}>{caretMatch[3]}</span>
+              </div>
+            );
+          }
+        }
+        // Gutter line "  |" or "N |"
+        if (/^\s*\d*\s*\|/.test(line)) {
+          const pipeIdx = line.indexOf('|');
+          const gutter  = line.slice(0, pipeIdx + 1);
+          const code    = line.slice(pipeIdx + 1);
+          return (
+            <div key={i} style={{ display: 'flex' }}>
+              <span style={{ color: 'var(--text-muted)', whiteSpace: 'pre', userSelect: 'none' }}>
+                {gutter}
+              </span>
+              <span style={{ color: 'var(--text-primary)', whiteSpace: 'pre' }}>{code}</span>
+            </div>
+          );
+        }
+        // "Guppy compilation failed" footer
+        if (line.startsWith('Guppy compilation')) {
+          return (
+            <div key={i} style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+              {line}
+            </div>
+          );
+        }
+        // Empty / separator lines
+        return (
+          <div key={i} style={{ color: 'var(--text-muted)', whiteSpace: 'pre' }}>
+            {line || '\u00a0'}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+

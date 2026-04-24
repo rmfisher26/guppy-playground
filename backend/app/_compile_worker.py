@@ -6,12 +6,14 @@ Reads JSON from stdin:
     "seed": int|null }
 
 Writes JSON to stdout:
-  { "status": "ok", "counts": {...}, "hugr_nodes": [...], "warnings": [] }
-  { "status": "error", "errors": [...] }
+  { "status": "ok",    "counts": {...}, "hugr_nodes": [...], "warnings": [] }
+  { "status": "error", "errors": [{
+      "message": "Error: Index out of bounds...(pretty-printed)",
+      "raw_message": "...",
+      "line": 8, "col": 1, "kind": "type_error"
+  }] }
 
-This is the ONLY file that imports guppylang and selene_sim.
-The compile+simulate in one process avoids the selene daemon connection
-issue that occurs when build() is called from a fresh subprocess.
+This is the ONLY file that imports guppylang and selene_sim directly.
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ import sys
 import tempfile
 import traceback
 
-MAX_QUBITS_STATEVECTOR = 20   # 2^20 * 16B = 16MB — safe in container
+MAX_QUBITS_STATEVECTOR = 20
 MAX_QUBITS_STABILIZER  = 50
 
 
@@ -41,10 +43,9 @@ def main() -> None:
     try:
         tmpfile.write(source)
         tmpfile.close()
-        _run(tmppath, shots, simulator, seed)
+        _run(tmppath, source, shots, simulator, seed)
     except Exception as exc:
-        tb_str = traceback.format_exc()
-        errors = _parse_errors(exc, tb_str)
+        errors = _parse_error(exc, source, traceback.format_exc())
         print(json.dumps({"status": "error", "errors": errors}))
     finally:
         try:
@@ -53,7 +54,7 @@ def main() -> None:
             pass
 
 
-def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
+def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None) -> None:
     from guppylang.defs import GuppyFunctionDefinition
 
     spec = importlib.util.spec_from_file_location("_guppy_user", tmppath)
@@ -65,10 +66,9 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     except SystemExit:
         pass
+    # GuppyError propagates out of exec_module — let it bubble to main()
 
-    # Prefer a function named 'main' as the emulator entry point.
-    # The guppylang emulator requires an entry function that takes no arguments.
-    # If the user hasn't written main(), fall back to the first @guppy function.
+    # Find main() entry point first, then any other @guppy fn
     guppy_fn = None
     for attr in ("main", *dir(module)):
         obj = getattr(module, attr, None)
@@ -77,22 +77,17 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
             break
 
     if guppy_fn is None:
-        # No @guppy function found — check() was called, no simulation needed
         print(json.dumps({
-            "status":     "ok",
-            "counts":     {},
-            "hugr_nodes": _infer_nodes(open(tmppath).read() if os.path.exists(tmppath) else ""),
-            "warnings":   [],
+            "status":      "ok",
+            "counts":      {},
+            "hugr_nodes":  _infer_nodes(source),
+            "warnings":    [],
             "qubit_count": 0,
         }))
         return
 
-    # ── Qubit count ──────────────────────────────────────────────────────
-    n_qubits = _infer_qubit_count_from_source(
-        open(tmppath).read() if os.path.exists(tmppath) else ""
-    )
+    n_qubits = _infer_qubit_count(source)
 
-    # ── Guard ────────────────────────────────────────────────────────────
     if simulator == "statevector" and n_qubits > MAX_QUBITS_STATEVECTOR:
         raise ValueError(
             f"Statevector needs 2^n memory: {n_qubits} qubits ≈ "
@@ -102,17 +97,15 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
     if n_qubits > MAX_QUBITS_STABILIZER:
         raise ValueError(f"{n_qubits} qubits exceeds playground limit of {MAX_QUBITS_STABILIZER}.")
 
-    # ── Compile HUGR nodes for display ───────────────────────────────────
+    # Compile HUGR for display panel
     hugr_nodes: list[dict] = []
-    warnings: list[dict]   = []
     try:
         pkg = guppy_fn.compile()
-        hugr_str = pkg.to_str()
-        hugr_nodes = _extract_nodes(hugr_str)
+        hugr_nodes = _extract_nodes(pkg.to_str())
     except Exception:
-        hugr_nodes = _infer_nodes(open(tmppath).read() if os.path.exists(tmppath) else "")
+        hugr_nodes = _infer_nodes(source)
 
-    # ── Simulate via guppylang emulator API ──────────────────────────────
+    # Simulate
     emulator = guppy_fn.emulator(n_qubits=n_qubits).with_shots(shots)
     if seed is not None:
         emulator = emulator.with_seed(seed)
@@ -126,12 +119,8 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
         result = emulator.run()
     except Exception as exc:
         msg = str(exc)
-        # Non-Clifford gates (T, Toffoli, Rz) can't run on stabilizer simulator.
-        # Automatically retry with statevector if stabilizer fails with this error.
-        if simulator == "stabilizer" and (
-            "not representable in stabiliser form" in msg
-            or "RXY" in msg
-            or "Clifford" in msg
+        if simulator == "stabilizer" and any(
+            k in msg for k in ("not representable in stabiliser form", "RXY", "Clifford")
         ):
             emulator_sv = guppy_fn.emulator(n_qubits=n_qubits).with_shots(shots)
             if seed is not None:
@@ -140,7 +129,6 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
         else:
             raise
 
-    # Aggregate shot entries into bitstring counts
     counts: dict[str, int] = {}
     for shot in result.results:
         parts = []
@@ -156,29 +144,152 @@ def _run(tmppath: str, shots: int, simulator: str, seed: int | None) -> None:
         "status":      "ok",
         "counts":      counts,
         "hugr_nodes":  hugr_nodes,
-        "warnings":    warnings,
+        "warnings":    [],
         "qubit_count": n_qubits,
     }))
 
 
-def _infer_qubit_count_from_source(source: str) -> int:
-    """Count qubit() calls + array sizes to estimate circuit width."""
-    # Count explicit qubit() calls
-    individual = len(re.findall(r'\bqubit\(\)', source))
-    # Count array(qubit() for _ in range(N)) patterns
-    array_total = sum(int(m) for m in re.findall(r'range\((\d+)\)', source))
-    total = individual + array_total
-    return max(total, 2)
+# ── Error rendering ────────────────────────────────────────────────────────
 
+def _parse_error(exc: Exception, source: str, tb_str: str) -> list[dict]:
+    """
+    Convert any exception into a structured error dict.
+    For GuppyError, renders the pretty source-annotated message that
+    guppylang shows when run as a script.
+    For other exceptions, falls back to cleaned plain-text formatting.
+    """
+    if hasattr(exc, "error"):
+        return [_render_guppy_error(exc, source)]
+    return [_render_plain_error(exc, tb_str)]
+
+
+def _render_guppy_error(exc: Exception, source: str) -> dict:
+    """
+    Build the canonical guppylang error display from a GuppyError's
+    internal .error object, which carries structured span + message data.
+
+    Output format:
+        Error: <title> (at $FILE:<line>:<col>)
+          |
+        N | <context line>
+        N | <error line>
+          |   ^^ <label>
+
+        Guppy compilation failed due to 1 previous error
+    """
+    try:
+        err  = exc.error
+        span = err.span
+
+        title = getattr(err, "rendered_title", None) or getattr(err, "title", "Error")
+        label = getattr(err, "rendered_span_label", None) or getattr(err, "span_label", "") or ""
+
+        # span.lineno is relative to span.source (the function body).
+        # Locate the function body inside the full source to get absolute line.
+        func_source: str = getattr(span, "source", "") or ""
+        abs_lineno = getattr(span, "lineno", 1)
+        func_first_line = func_source.split("\n")[0].strip()
+        full_lines = source.split("\n")
+        func_start_line = 1
+        if func_first_line:
+            for i, ln in enumerate(full_lines):
+                if func_first_line in ln:
+                    func_start_line = i + 1
+                    break
+        absolute_line = func_start_line + abs_lineno - 1
+
+        col     = getattr(span, "col_offset",     0)
+        end_col = getattr(span, "end_col_offset", col + 1)
+
+        # Build context lines (up to 2 lines before, the error line itself)
+        ctx_start = max(1, absolute_line - 2)
+        ctx_end   = min(len(full_lines), absolute_line)
+        ctx_lines = [(ln, full_lines[ln - 1]) for ln in range(ctx_start, ctx_end + 1)]
+
+        out = [f"Error: {title} (at $FILE:{absolute_line}:{col})", "  | "]
+        for ln, text in ctx_lines:
+            out.append(f"{ln} | {text}")
+            if ln == absolute_line:
+                caret = "^" * max(1, end_col - col)
+                pointer = " " * col + caret
+                if label:
+                    pointer += " " + label
+                out.append(f"  | {pointer}")
+        out += ["", "Guppy compilation failed due to 1 previous error"]
+
+        pretty = "\n".join(out)
+
+        # Classify kind
+        title_lower = title.lower()
+        if any(k in title_lower for k in ("linear", "qubit", "owned", "borrow", "drop",
+                                           "already", "copy", "move")):
+            kind = "linearity_error"
+        elif any(k in title_lower for k in ("syntax", "invalid syntax")):
+            kind = "syntax_error"
+        elif any(k in title_lower for k in ("name", "undefined", "unresolved", "not defined")):
+            kind = "name_error"
+        else:
+            kind = "type_error"
+
+        return {
+            "message":     pretty,
+            "raw_message": str(exc),
+            "line":        absolute_line,
+            "col":         col,
+            "kind":        kind,
+        }
+
+    except Exception:
+        # If our renderer itself breaks, fall back to the exception repr
+        return _render_plain_error(exc, "")
+
+
+def _render_plain_error(exc: Exception, tb_str: str) -> dict:
+    """Fallback for non-GuppyError exceptions (syntax errors, import errors, etc.)"""
+    msg = str(exc)
+    combined = msg + "\n" + tb_str
+
+    line = 1
+    for pat in [r"line (\d+)", r":(\d+):"]:
+        m = re.search(pat, combined)
+        if m:
+            line = int(m.group(1))
+            break
+
+    msg_lower = msg.lower()
+    if any(k in msg_lower for k in ("linear", "qubit", "owned", "already", "copy")):
+        kind = "linearity_error"
+    elif any(k in msg_lower for k in ("syntax", "invalid syntax")):
+        kind = "syntax_error"
+    elif any(k in msg_lower for k in ("name", "not defined", "undefined")):
+        kind = "name_error"
+    else:
+        kind = "type_error"
+
+    # Clean up internal paths and object reprs
+    display = next((l.strip() for l in msg.splitlines() if l.strip()), msg)
+    display = re.sub(r"guppy_user_\w+\.py", "your_program.py", display)
+    display = re.sub(r"\(span=<[^>]+>,?\s*", "(", display)
+
+    return {"message": display[:300], "line": line, "col": 0, "kind": kind}
+
+
+# ── Qubit count heuristic ──────────────────────────────────────────────────
+
+def _infer_qubit_count(source: str) -> int:
+    individual = len(re.findall(r'\bqubit\(\)', source))
+    array_total = sum(int(m) for m in re.findall(r'range\((\d+)\)', source))
+    return max(individual + array_total, 2)
+
+
+# ── HUGR node extraction ───────────────────────────────────────────────────
 
 def _extract_nodes(hugr_str: str) -> list[dict]:
-    """Extract display nodes from HUGR envelope string."""
     try:
         json_start = hugr_str.index('{')
         data = json.loads(hugr_str[json_start:])
     except (ValueError, json.JSONDecodeError):
         return []
-
     nodes: list[dict] = []
     nid = [0]
     type_map = {
@@ -189,19 +300,16 @@ def _extract_nodes(hugr_str: str) -> list[dict]:
         "Measure": "Measure", "QAlloc": "Gate", "QFree": "Gate",
         "Const": "Const", "Input": "Input", "Output": "Output",
     }
-
     def walk(obj: dict, depth: int) -> None:
-        op   = obj.get("op", obj.get("type", "Unknown"))
-        name = obj.get("name", op)
+        op = obj.get("op", obj.get("type", "Unknown"))
         nodes.append({
             "id": str(nid[0]), "type": type_map.get(op, "Call"),
-            "name": name, "meta": "", "parent": None, "depth": depth,
+            "name": obj.get("name", op), "meta": "", "parent": None, "depth": depth,
         })
         nid[0] += 1
         for child in obj.get("children", []):
             if isinstance(child, dict):
                 walk(child, depth + 1)
-
     for n in data.get("modules", [{}])[0].get("nodes", []):
         if isinstance(n, dict):
             walk(n, 0)
@@ -209,21 +317,19 @@ def _extract_nodes(hugr_str: str) -> list[dict]:
 
 
 def _infer_nodes(source: str) -> list[dict]:
-    """Fallback: approximate nodes from source analysis."""
     nodes: list[dict] = []
     nid = [0]
-
     def add(type_: str, name: str, depth: int) -> None:
         nodes.append({"id": str(nid[0]), "type": type_, "name": name,
                        "meta": "", "depth": depth, "parent": None})
         nid[0] += 1
-
     gate_ops    = {"h","cx","cz","x","y","z","s","t","toffoli","rx","ry","rz"}
     measure_ops = {"measure","measure_array"}
-
     add("DFG", "module", 0)
-    fn_pat = re.compile(r"@guppy(?:\.[^\n]*)?\ndef\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^:]+):", re.MULTILINE)
-
+    fn_pat = re.compile(
+        r"@guppy(?:\.[^\n]*)?\ndef\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^:]+):",
+        re.MULTILINE,
+    )
     for m in fn_pat.finditer(source):
         add("FuncDef", f"{m.group(1)}({m.group(2).strip()}) → {m.group(3).strip()}", 1)
         start   = m.end()
@@ -237,45 +343,6 @@ def _infer_nodes(source: str) -> list[dict]:
             elif op in measure_ops and op not in seen:
                 add("Measure", op, 2); seen.add(op)
     return nodes
-
-
-def _parse_errors(exc: Exception, tb_str: str) -> list[dict]:
-    msg      = str(exc)
-    combined = msg + "\n" + tb_str
-
-    line = 1
-    for pat in [r"line (\d+)", r":(\d+):"]:
-        m = re.search(pat, combined)
-        if m:
-            line = int(m.group(1))
-            break
-
-    msg_lower = msg.lower()
-    if any(k in msg_lower for k in ("linear","qubit","owned","borrow","drop","already")):
-        kind = "linearity_error"
-    elif any(k in msg_lower for k in ("type","expected","got","annotation")):
-        kind = "type_error"
-    elif any(k in msg_lower for k in ("syntax","invalid syntax")):
-        kind = "syntax_error"
-    elif any(k in msg_lower for k in ("name","not defined","undefined")):
-        kind = "name_error"
-    else:
-        kind = "internal_error"
-
-    display = _clean_message(msg)
-    return [{"message": display[:300], "line": line, "col": 0, "kind": kind}]
-
-
-def _clean_message(msg: str) -> str:
-    if "AlreadyUsed" in msg:
-        m = re.search(r"place=Variable\(name='(\w+)'", msg)
-        return f"Linearity error: '{m.group(1) if m else 'qubit'}' already used or consumed"
-    if "NotUsed" in msg or "DropError" in msg or "leaked" in msg.lower():
-        m = re.search(r"Variable `(\w+)`", msg) or re.search(r"place=Variable\(name='(\w+)'", msg)
-        return f"Linearity error: '{m.group(1) if m else 'qubit'}' was never measured or discarded"
-    first = next((l.strip() for l in msg.splitlines() if l.strip()), msg)
-    first = re.sub(r"guppy_user_\w+\.py", "your_program.py", first)
-    return first
 
 
 if __name__ == "__main__":
