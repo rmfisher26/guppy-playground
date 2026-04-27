@@ -32,6 +32,7 @@ MAX_QUBITS_STABILIZER  = 50
 def main() -> None:
     payload    = json.loads(sys.stdin.read())
     source: str       = payload["source"]
+    filename: str     = payload.get("filename", "main.py")
     shots: int        = payload.get("shots", 1024)
     simulator: str    = payload.get("simulator", "stabilizer")
     seed: int | None  = payload.get("seed")
@@ -45,7 +46,7 @@ def main() -> None:
         tmpfile.close()
         _run(tmppath, source, shots, simulator, seed)
     except Exception as exc:
-        errors = _parse_error(exc, source, traceback.format_exc())
+        errors = _parse_error(exc, source, traceback.format_exc(), filename)
         print(json.dumps({"status": "error", "errors": errors}))
     finally:
         try:
@@ -151,7 +152,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
 
 # ── Error rendering ────────────────────────────────────────────────────────
 
-def _parse_error(exc: Exception, source: str, tb_str: str) -> list[dict]:
+def _parse_error(exc: Exception, source: str, tb_str: str, filename: str = "main.py") -> list[dict]:
     """
     Convert any exception into a structured error dict.
     For GuppyError, renders the pretty source-annotated message that
@@ -159,11 +160,11 @@ def _parse_error(exc: Exception, source: str, tb_str: str) -> list[dict]:
     For other exceptions, falls back to cleaned plain-text formatting.
     """
     if hasattr(exc, "error"):
-        return [_render_guppy_error(exc, source)]
+        return [_render_guppy_error(exc, source, filename)]
     return [_render_plain_error(exc, tb_str)]
 
 
-def _render_guppy_error(exc: Exception, source: str) -> dict:
+def _render_guppy_error(exc: Exception, source: str, filename: str = "main.py") -> dict:
     """
     Build the canonical guppylang error display from a GuppyError's
     internal .error object, which carries structured span + message data.
@@ -206,7 +207,9 @@ def _render_guppy_error(exc: Exception, source: str) -> dict:
         ctx_end   = min(len(full_lines), absolute_line)
         ctx_lines = [(ln, full_lines[ln - 1]) for ln in range(ctx_start, ctx_end + 1)]
 
-        out = [f"Error: {title} (at $FILE:{absolute_line}:{col})", "  | "]
+        # Use the display filename passed from the frontend (e.g. "main.py",
+        # "bell_pair.py") rather than the internal temp file path.
+        out = [f"Error: {title} (at {filename}:{absolute_line}:{col})", "   | "]
         for ln, text in ctx_lines:
             out.append(f"{ln} | {text}")
             if ln == absolute_line:
@@ -214,7 +217,7 @@ def _render_guppy_error(exc: Exception, source: str) -> dict:
                 pointer = " " * col + caret
                 if label:
                     pointer += " " + label
-                out.append(f"  | {pointer}")
+                out.append(f"   | {pointer}")
         out += ["", "Guppy compilation failed due to 1 previous error"]
 
         pretty = "\n".join(out)
@@ -268,7 +271,7 @@ def _render_plain_error(exc: Exception, tb_str: str) -> dict:
 
     # Clean up internal paths and object reprs
     display = next((l.strip() for l in msg.splitlines() if l.strip()), msg)
-    display = re.sub(r"guppy_user_\w+\.py", "your_program.py", display)
+    display = re.sub(r"/[^ ]+/guppy_user_\w+\.py", "your_program.py", display)
     display = re.sub(r"\(span=<[^>]+>,?\s*", "(", display)
 
     return {"message": display[:300], "line": line, "col": 0, "kind": kind}

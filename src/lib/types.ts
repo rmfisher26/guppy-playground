@@ -4,6 +4,7 @@ export type SimulatorBackend = 'stabilizer' | 'statevector';
 
 export interface RunRequest {
   source: string;
+  filename?: string;            // display name shown in error messages (e.g. "main.py")
   entry_point?: string;
   shots: number;
   simulator: SimulatorBackend;

@@ -12,6 +12,7 @@ class SimulatorBackend(str, Enum):
 
 class RunRequest(BaseModel):
     source:      str
+    filename:    str = "main.py"         # display name shown in error messages
     entry_point: str | None = None       # inferred from @guppy fn if None
     shots:       int        = Field(1024, ge=1, le=8192)
     simulator:   SimulatorBackend = SimulatorBackend.stabilizer
