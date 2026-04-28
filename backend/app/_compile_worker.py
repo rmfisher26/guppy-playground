@@ -209,15 +209,17 @@ def _render_guppy_error(exc: Exception, source: str, filename: str = "main.py") 
 
         # Use the display filename passed from the frontend (e.g. "main.py",
         # "bell_pair.py") rather than the internal temp file path.
-        out = [f"Error: {title} (at {filename}:{absolute_line}:{col})", "   | "]
+        w = len(str(ctx_end))  # width of the widest line number in context
+        pad = " " * w
+        out = [f"Error: {title} (at {filename}:{absolute_line}:{col})", f"{pad} | "]
         for ln, text in ctx_lines:
-            out.append(f"{ln} | {text}")
+            out.append(f"{str(ln).rjust(w)} | {text}")
             if ln == absolute_line:
                 caret = "^" * max(1, end_col - col)
                 pointer = " " * col + caret
                 if label:
                     pointer += " " + label
-                out.append(f"   | {pointer}")
+                out.append(f"{pad} | {pointer}")
         out += ["", "Guppy compilation failed due to 1 previous error"]
 
         pretty = "\n".join(out)
