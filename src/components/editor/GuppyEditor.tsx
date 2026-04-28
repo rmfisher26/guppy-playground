@@ -52,36 +52,56 @@ const guppyDarkTheme = EditorView.theme({
 });
 
 // ── Light theme ──────────────────────────────────────────────────────────
+// Colors from highlight.js GitHub light theme used on docs.quantinuum.com/guppy/
 const lightHighlight = HighlightStyle.define([
-  { tag: tags.keyword,                         color: '#cf222e', fontWeight: '500' },
-  { tag: tags.string,                          color: '#0a3069' },
-  { tag: tags.comment,                         color: '#6e7781', fontStyle: 'italic' },
-  { tag: tags.number,                          color: '#0550ae' },
-  { tag: tags.bool,                            color: '#0550ae' },
-  { tag: tags.operator,                        color: '#24292f' },
-  { tag: tags.punctuation,                     color: '#24292f' },
-  { tag: tags.function(tags.name),             color: '#8250df' },
-  { tag: tags.definition(tags.variableName),   color: '#953800' },
-  { tag: tags.className,                       color: '#953800' },
-  { tag: tags.typeName,                        color: '#953800' },
-  { tag: tags.propertyName,                    color: '#0550ae' },
-  { tag: tags.self,                            color: '#953800' },
-  { tag: tags.variableName,                    color: '#1f2328' },
+  // Keywords: def, class, import, from, return, if, for, with, as, yield…
+  { tag: [tags.keyword, tags.moduleKeyword, tags.controlKeyword], color: '#d73a49' },
+
+  // Strings and escape sequences
+  { tag: [tags.string, tags.special(tags.string)], color: '#032f62' },
+
+  // Comments
+  { tag: tags.comment, color: '#6a737d', fontStyle: 'italic' },
+
+  // Numbers, booleans, null (None/True/False)
+  { tag: [tags.number, tags.bool, tags.null], color: '#005cc5' },
+
+  // Operators (+, -, *, =, ==, …) — blue like numbers/literals
+  { tag: tags.operator, color: '#005cc5' },
+
+  // Punctuation stays near-black
+  { tag: tags.punctuation, color: '#24292e' },
+
+  // Function and class names in definitions → purple
+  { tag: [tags.function(tags.variableName), tags.function(tags.definition(tags.variableName))], color: '#6f42c1' },
+  { tag: [tags.className, tags.definition(tags.typeName)], color: '#6f42c1' },
+
+  // Built-ins and self/cls → orange
+  { tag: [tags.self, tags.standard(tags.name)], color: '#e36209' },
+
+  // Type annotations and type names → red (same as keywords)
+  { tag: tags.typeName, color: '#d73a49' },
+
+  // Property access (obj.attr)
+  { tag: tags.propertyName, color: '#005cc5' },
+
+  // Plain variable names
+  { tag: tags.variableName, color: '#24292e' },
 ]);
 
 const guppyLightTheme = EditorView.theme({
-  '&': { height: '100%', fontSize: '13px', fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace", background: '#f6f8fa' },
+  '&': { height: '100%', fontSize: '13px', fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace", background: '#f5f5f3' },
   '.cm-scroller': { fontFamily: 'inherit', lineHeight: '20px', overflow: 'auto' },
-  '.cm-content': { padding: '16px 0', caretColor: '#0090ae', color: '#1f2328' },
-  '.cm-gutters': { background: '#f6f8fa', border: 'none', borderRight: '1px solid #d0d7de', color: '#9198a1', minWidth: '48px' },
+  '.cm-content': { padding: '16px 0', caretColor: '#30a08e', color: '#0d0f14' },
+  '.cm-gutters': { background: '#f5f5f3', border: 'none', borderRight: '1px solid #dfdddb', color: '#989898', minWidth: '48px' },
   '.cm-lineNumbers .cm-gutterElement': { padding: '0 10px 0 4px', minWidth: '40px', textAlign: 'right' },
-  '.cm-activeLine': { background: 'rgba(0,144,174,0.05)' },
-  '.cm-activeLineGutter': { background: 'rgba(0,144,174,0.08)', color: '#656d76' },
-  '.cm-selectionBackground, ::selection': { background: 'rgba(0,144,174,0.18) !important' },
-  '.cm-cursor': { borderLeftColor: '#0090ae' },
-  '.cm-error-line': { background: 'rgba(209,36,47,0.07)', borderLeft: '2px solid #d1242f' },
+  '.cm-activeLine': { background: 'rgba(48,160,142,0.05)' },
+  '.cm-activeLineGutter': { background: 'rgba(48,160,142,0.08)', color: '#4d4d4d' },
+  '.cm-selectionBackground, ::selection': { background: 'rgba(48,160,142,0.18) !important' },
+  '.cm-cursor': { borderLeftColor: '#30a08e' },
+  '.cm-error-line': { background: 'rgba(255,92,58,0.07)', borderLeft: '2px solid #ff5c3a' },
   '.cm-focused': { outline: 'none' },
-  '&.cm-focused .cm-selectionBackground': { background: 'rgba(0,144,174,0.22)' },
+  '&.cm-focused .cm-selectionBackground': { background: 'rgba(48,160,142,0.22)' },
 }, { dark: false });
 
 // ── Theme compartment (module-level so both effects share it) ────────────
