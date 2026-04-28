@@ -61,6 +61,7 @@ interface PlaygroundStore {
   // Run state machine
   runState: RunState;
   setRunState: (s: RunState) => void;
+  runId: number;  // increments on each new run, used to reset per-run UI state
 
   // Output UI
   activeTab: OutputTab;
@@ -119,10 +120,12 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   },
 
   runState: { status: 'idle' },
+  runId: 0,
   setRunState: (runState) => {
     const errorMarkers =
       runState.status === 'compile_error' ? runState.errors : [];
-    set({ runState, errorMarkers });
+    const runId = runState.status === 'compiling' ? get().runId + 1 : get().runId;
+    set({ runState, errorMarkers, runId });
   },
 
   activeTab: 'output',

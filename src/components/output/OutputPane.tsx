@@ -13,7 +13,7 @@ function RunShortcutRegistrar() {
 }
 
 export default function OutputPane() {
-  const { activeTab, setActiveTab, runState } = usePlaygroundStore();
+  const { activeTab, setActiveTab, runState, runId } = usePlaygroundStore();
 
   const statusInfo = getStatusInfo(runState);
 
@@ -51,7 +51,7 @@ export default function OutputPane() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {activeTab === 'output'  && <TerminalOutput />}
         {activeTab === 'results' && <ResultsTab />}
-        {activeTab === 'hugr'    && <HugrTab />}
+        {activeTab === 'hugr'    && <HugrTab key={runId} />}
       </div>
 
       {/* Status bar */}
