@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import React, { useMemo, useState } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { usePlaygroundStore } from '../../lib/store';
 
 export default function ResultsTab() {
   const { runState } = usePlaygroundStore();
+  const [chartLayout, setChartLayout] = useState<'vertical' | 'horizontal'>('vertical');
 
   if (runState.status !== 'success' || !runState.response.results) {
     return (
@@ -48,36 +49,85 @@ export default function ResultsTab() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-      <SectionTitle>Measurement Outcomes · {total.toLocaleString()} shots</SectionTitle>
+      {/* Section header with orientation toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+          Measurement Outcomes · {total.toLocaleString()} shots
+        </div>
+        <button
+          onClick={() => setChartLayout(l => l === 'vertical' ? 'horizontal' : 'vertical')}
+          title={chartLayout === 'vertical' ? 'Switch to vertical bars' : 'Switch to horizontal bars'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            height: 22, padding: '0 8px', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', background: 'var(--bg-raised)',
+            cursor: 'pointer', color: 'var(--text-muted)',
+            fontFamily: 'var(--font-ui)', fontSize: 10,
+          }}
+          onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border-bright)'; }}
+          onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'var(--border)'; }}
+        >
+          {chartLayout === 'vertical' ? <HorizBarsIcon /> : <VertBarsIcon />}
+          {chartLayout === 'vertical' ? 'Vertical' : 'Horizontal'}
+        </button>
+      </div>
 
       {/* Recharts bar chart */}
-      <div style={{ height: Math.max(120, chartData.length * 36), marginBottom: 16 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 40, top: 4, bottom: 4 }}>
-            <XAxis type="number" hide domain={[0, total]} />
-            <YAxis
-              type="category" dataKey="basis" width={48}
-              tick={{ fill: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-              axisLine={false} tickLine={false}
-            />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,180,216,0.06)' }} />
-            <Bar dataKey="count" radius={[0, 3, 3, 0]} maxBarSize={22}>
-              {chartData.map((_, i) => (
-                <Cell
-                  key={i}
-                  fill={`url(#barGradient)`}
-                />
-              ))}
-              <defs>
-                <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="var(--teal-dim)" />
-                  <stop offset="100%" stopColor="var(--teal)" />
-                </linearGradient>
-              </defs>
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {chartLayout === 'vertical' ? (
+        <div style={{ height: Math.max(120, chartData.length * 36), marginBottom: 16 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 48, top: 4, bottom: 4 }}>
+              <XAxis type="number" hide domain={[0, total]} />
+              <YAxis
+                type="category" dataKey="basis" width={48}
+                tick={{ fill: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                axisLine={false} tickLine={false}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,180,216,0.06)' }} />
+              <Bar dataKey="count" fill="#0a2f52" radius={[0, 3, 3, 0]} maxBarSize={22}
+                label={({ x, y, width, height, value, index }: any) => {
+                  const pct = chartData[index]?.pct;
+                  return (
+                    <text x={x + width + 6} y={y + height / 2}
+                      dominantBaseline="middle" textAnchor="start"
+                      fontFamily="var(--font-mono)" fontSize={10} fill="var(--text-muted)"
+                    >
+                      {value.toLocaleString()} · {pct}%
+                    </text>
+                  );
+                }}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div style={{ height: Math.max(160, 120 + chartData.length * 8), marginBottom: 16 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: 24, bottom: 4 }}>
+              <XAxis
+                type="category" dataKey="basis" width={48}
+                tick={{ fill: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                axisLine={false} tickLine={false}
+              />
+              <YAxis type="number" hide domain={[0, total]} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,180,216,0.06)' }} />
+              <Bar dataKey="count" fill="#0a2f52" radius={[3, 3, 0, 0]} maxBarSize={40}
+                label={({ x, y, width, index }: any) => {
+                  const pct = chartData[index]?.pct;
+                  return (
+                    <text x={x + width / 2} y={y - 5}
+                      dominantBaseline="auto" textAnchor="middle"
+                      fontFamily="var(--font-mono)" fontSize={10} fill="var(--text-muted)"
+                    >
+                      {pct}%
+                    </text>
+                  );
+                }}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Expectation values */}
       {expectation_values && Object.keys(expectation_values).length > 0 && (
@@ -153,5 +203,25 @@ function Kbd({ children }: { children: React.ReactNode }) {
     }}>
       {children}
     </span>
+  );
+}
+
+function HorizBarsIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <rect x="2" y="4" width="10" height="4" rx="1" fill="currentColor" stroke="none"/>
+      <rect x="2" y="10" width="16" height="4" rx="1" fill="currentColor" stroke="none"/>
+      <rect x="2" y="16" width="7" height="4" rx="1" fill="currentColor" stroke="none"/>
+    </svg>
+  );
+}
+
+function VertBarsIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <rect x="2" y="10" width="4" height="12" rx="1" fill="currentColor" stroke="none"/>
+      <rect x="10" y="4" width="4" height="18" rx="1" fill="currentColor" stroke="none"/>
+      <rect x="18" y="14" width="4" height="8" rx="1" fill="currentColor" stroke="none"/>
+    </svg>
   );
 }
