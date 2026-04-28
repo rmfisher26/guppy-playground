@@ -5,18 +5,10 @@ import { encodeShareUrl } from '../../lib/api';
 import { useMobile } from '../../lib/useMobile';
 
 export default function Toolbar() {
-  const { shots, setShots, simulator, setSimulator, runState, examples, activeSlot, activeExampleId, setActiveExample, showToast } = usePlaygroundStore();
+  const { shots, setShots, simulator, setSimulator, runState, showToast } = usePlaygroundStore();
   const isMobile = useMobile();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
-
-  function handleExampleChange(id: string) {
-    const ex = examples.find(e => e.id === id);
-    if (!ex) return;
-    setActiveExample(id);
-    setSource(ex.source);
-    setModified(false);
-  }
 
   function handleShare() {
     const source = usePlaygroundStore.getState().source;
@@ -64,29 +56,7 @@ export default function Toolbar() {
         }
       </button>
 
-      {/* Example picker — desktop only */}
-      {!isMobile && (
-        <>
-          <Sep />
-          <SelectWrap>
-            <select
-              style={{
-                ...selectStyle,
-                color: activeSlot !== 'workspace' ? 'var(--text-secondary)' : 'var(--text-muted)',
-              }}
-              value={activeSlot === 'workspace' ? '' : activeExampleId}
-              onChange={e => handleExampleChange(e.target.value)}
-            >
-              <option value="">— examples —</option>
-              {examples.map(ex => (
-                <option key={ex.id} value={ex.id}>{ex.title}</option>
-              ))}
-            </select>
-            <Chevron />
-          </SelectWrap>
-          <Sep />
-        </>
-      )}
+      <div style={{ flex: 1 }} />
 
       {/* Simulator */}
       <SelectWrap>
@@ -107,8 +77,6 @@ export default function Toolbar() {
         </select>
         <Chevron />
       </SelectWrap>
-
-      <div style={{ flex: 1 }} />
 
       {/* Share — desktop only */}
       {!isMobile && (
@@ -137,9 +105,6 @@ export default function Toolbar() {
   );
 }
 
-function Sep() {
-  return <div style={{ width:1, height:18, background:'var(--border)', margin:'0 2px', flexShrink:0 }} />;
-}
 
 function SelectWrap({ children }: { children: React.ReactNode }) {
   return <div style={{ position:'relative', display:'flex', alignItems:'center' }}>{children}</div>;
