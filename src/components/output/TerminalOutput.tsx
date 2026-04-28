@@ -9,7 +9,12 @@ export default function TerminalOutput() {
       flex: 1, padding: 16, fontFamily: 'var(--font-mono)',
       fontSize: 12, lineHeight: 1.7, overflowY: 'auto',
       background: '#0d1117',
-    }}>
+      // Pin CSS variables to dark-terminal values so light theme doesn't break visibility
+      '--text-primary':   '#e6edf3',
+      '--text-secondary': '#e6edf3',
+      '--text-muted':     '#6e7681',
+      '--border':         '#30363d',
+    } as React.CSSProperties}>
       <TerminalContent state={runState} />
     </div>
   );
