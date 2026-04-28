@@ -2,6 +2,27 @@ import { create } from 'zustand';
 import type { RunState, OutputTab, Example, CompileError } from './types';
 import { DEFAULT_SOURCE } from './defaultSource';
 
+export type Theme = 'dark' | 'light' | 'system';
+
+function loadTheme(): Theme {
+  try {
+    const v = localStorage.getItem('guppy-theme');
+    if (v === 'light' || v === 'system') return v;
+  } catch {}
+  return 'dark';
+}
+
+export function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('guppy-theme', theme); } catch {}
+}
+
+export function resolveIsDark(theme: Theme): boolean {
+  if (theme === 'dark') return true;
+  if (theme === 'light') return false;
+  return !window.matchMedia('(prefers-color-scheme: light)').matches;
+}
+
 // The active "slot" in the editor — either 'workspace' or an example id
 export type ActiveSlot = 'workspace' | string;
 
@@ -47,6 +68,10 @@ interface PlaygroundStore {
 
   // Inline error markers for CodeMirror
   errorMarkers: CompileError[];
+
+  // Theme
+  theme: Theme;
+  setTheme: (t: Theme) => void;
 
   // Toast
   toastMessage: string | null;
@@ -104,6 +129,9 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   setActiveTab: (activeTab) => set({ activeTab }),
 
   errorMarkers: [],
+
+  theme: loadTheme(),
+  setTheme: (theme) => { applyTheme(theme); set({ theme }); },
 
   toastMessage: null,
   showToast: (toastMessage) => set({ toastMessage }),

@@ -8,7 +8,7 @@ export default function TerminalOutput() {
     <div style={{
       flex: 1, padding: 16, fontFamily: 'var(--font-mono)',
       fontSize: 12, lineHeight: 1.7, overflowY: 'auto',
-      background: 'var(--bg-base)',
+      background: '#0d1117',
     }}>
       <TerminalContent state={runState} />
     </div>

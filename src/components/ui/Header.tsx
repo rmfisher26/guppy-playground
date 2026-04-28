@@ -1,8 +1,21 @@
-import React from 'react';
-
-const s: Record<string, React.CSSProperties> = {};
+import React, { useEffect } from 'react';
+import { usePlaygroundStore } from '../../lib/store';
+import { applyTheme } from '../../lib/store';
+import type { Theme } from '../../lib/store';
 
 export default function Header() {
+  const { theme, setTheme } = usePlaygroundStore();
+
+  // Apply stored theme on first mount and listen for system preference changes
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const handler = () => applyTheme('system');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [theme]);
+
   return (
     <header style={{
       height: 'var(--header-h)',
@@ -25,7 +38,9 @@ export default function Header() {
         Quantinuum · Selene Emulator
       </span>
       <div style={{ flex:1 }} />
-      <nav style={{ display:'flex', alignItems:'center', gap:4 }}>
+      <nav style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <ThemeToggle current={theme} onChange={setTheme} />
+        <div style={{ width:1, height:16, background:'var(--border-bright)', flexShrink:0 }} />
         <HeaderLink href="https://github.com/Quantinuum/guppylang">
           <GithubIcon /> GitHub
         </HeaderLink>
@@ -37,6 +52,47 @@ export default function Header() {
   );
 }
 
+function ThemeToggle({ current, onChange }: { current: Theme; onChange: (t: Theme) => void }) {
+  const options: { value: Theme; icon: React.ReactNode; label: string }[] = [
+    { value: 'dark',   icon: <MoonIcon />,    label: 'Dark'   },
+    { value: 'light',  icon: <SunIcon />,     label: 'Light'  },
+    { value: 'system', icon: <MonitorIcon />, label: 'System' },
+  ];
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      background: 'rgba(255,255,255,0.06)',
+      border: '1px solid var(--border-bright)',
+      borderRadius: 'var(--radius)',
+      padding: 2, gap: 1,
+    }}>
+      {options.map(({ value, icon, label }) => {
+        const active = current === value;
+        return (
+          <button
+            key={value}
+            onClick={() => onChange(value)}
+            title={label}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 22, border: 'none', borderRadius: 4,
+              cursor: 'pointer',
+              background: active ? 'var(--teal)' : 'transparent',
+              color: active ? '#fff' : 'var(--text-muted)',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}
+            onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; }}
+          >
+            {icon}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function HeaderLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
@@ -44,16 +100,10 @@ function HeaderLink({ href, children }: { href: string; children: React.ReactNod
       target="_blank"
       rel="noreferrer"
       style={{
-        height: 28,
-        padding: '0 10px',
-        borderRadius: 'var(--radius-sm)',
-        color: 'var(--text-secondary)',
-        fontSize: 12,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        textDecoration: 'none',
-        transition: 'color 0.15s',
+        height: 28, padding: '0 10px', borderRadius: 'var(--radius-sm)',
+        color: 'var(--text-secondary)', fontSize: 12,
+        display: 'flex', alignItems: 'center', gap: 5,
+        textDecoration: 'none', transition: 'color 0.15s',
       }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; (e.currentTarget as HTMLElement).style.background = 'var(--bg-raised)'; }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -71,6 +121,40 @@ function LogoMark() {
       <circle cx="14" cy="14" r="3" fill="#00b4d8"/>
       <line x1="14" y1="6" x2="14" y2="22" stroke="#00b4d8" strokeWidth="0.75" opacity="0.4"/>
       <line x1="6"  y1="14" x2="22" y2="14" stroke="#00b4d8" strokeWidth="0.75" opacity="0.4"/>
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  );
+}
+
+function MonitorIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+      <line x1="8" y1="21" x2="16" y2="21"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
     </svg>
   );
 }
