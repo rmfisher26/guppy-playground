@@ -10,15 +10,11 @@ import Toast from './ui/Toast';
 import Sidebar from './sidebar/Sidebar';
 import EditorPane from './editor/EditorPane';
 import OutputPane from './output/OutputPane';
-import type { RunState } from '../lib/types';
-
 const OUTPUT_MIN = 200;
 const OUTPUT_MAX_MARGIN = 200;
 
-type MobilePanel = 'main' | 'examples';
-
 export default function Playground() {
-  const { setExamples, setActiveSlot, setSource, setModified, runState } = usePlaygroundStore();
+  const { setExamples, setActiveSlot, setSource, setModified } = usePlaygroundStore();
   const isMobile = useMobile();
 
   // Desktop resize state
@@ -31,8 +27,6 @@ export default function Playground() {
   // Sidebar collapse (desktop)
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Mobile state
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>('main');
   const [mobileSplitPct, setMobileSplitPct] = useState(55);
   const [mobileDividerActive, setMobileDividerActive] = useState(false);
   const mobileDragging = useRef(false);
@@ -126,33 +120,23 @@ export default function Playground() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
         <Header />
         <Toolbar />
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {/* Editor + Output stacked — kept mounted to preserve CodeMirror state */}
-          <div
-            ref={mobileMainRef}
-            style={{ display: mobilePanel === 'main' ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}
-          >
-            <div style={{ flex: `0 0 ${mobileSplitPct}%`, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-              <EditorPane />
-            </div>
-            <div
-              onMouseDown={onMobileDividerStart}
-              onTouchStart={onMobileDividerStart}
-              style={{
-                height: 5, flexShrink: 0, cursor: 'row-resize', touchAction: 'none',
-                background: mobileDividerActive ? 'var(--teal)' : 'var(--border)',
-                transition: mobileDividerActive ? 'none' : 'background 0.15s',
-              }}
-            />
-            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-              <OutputPane />
-            </div>
+        <div ref={mobileMainRef} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: `0 0 ${mobileSplitPct}%`, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <EditorPane />
           </div>
-          <div style={{ display: mobilePanel === 'examples' ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
-            <Sidebar />
+          <div
+            onMouseDown={onMobileDividerStart}
+            onTouchStart={onMobileDividerStart}
+            style={{
+              height: 5, flexShrink: 0, cursor: 'row-resize', touchAction: 'none',
+              background: mobileDividerActive ? 'var(--teal)' : 'var(--border)',
+              transition: mobileDividerActive ? 'none' : 'background 0.15s',
+            }}
+          />
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <OutputPane />
           </div>
         </div>
-        <MobileNav current={mobilePanel} onChange={setMobilePanel} runState={runState} />
         <Toast />
       </div>
     );
@@ -186,78 +170,3 @@ export default function Playground() {
   );
 }
 
-// ── Mobile bottom nav ──────────────────────────────────────────────────────
-
-function MobileNav({ current, onChange, runState }: {
-  current: MobilePanel;
-  onChange: (p: MobilePanel) => void;
-  runState: RunState;
-}) {
-  const hasError   = runState.status === 'compile_error';
-  const hasSuccess = runState.status === 'success';
-  const isRunning  = runState.status === 'compiling' || runState.status === 'simulating';
-
-  const tabs: { id: MobilePanel; label: string; icon: React.ReactNode; dot?: string }[] = [
-    { id: 'main',     label: 'Editor',   icon: <CodeIcon />,
-      dot: isRunning ? 'var(--teal)' : hasError ? 'var(--red)' : hasSuccess ? 'var(--green)' : undefined },
-    { id: 'examples', label: 'Examples', icon: <ExamplesIcon /> },
-  ];
-
-  return (
-    <nav style={{
-      height: 56, flexShrink: 0,
-      background: 'var(--bg-surface)',
-      borderTop: '1px solid var(--border)',
-      display: 'flex',
-    }}>
-      {tabs.map(({ id, label, icon, dot }) => {
-        const active = current === id;
-        return (
-          <button
-            key={id}
-            onClick={() => onChange(id)}
-            style={{
-              flex: 1, border: 'none', background: 'transparent',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 3,
-              cursor: 'pointer', position: 'relative',
-              color: active ? 'var(--teal)' : 'var(--text-muted)',
-              borderTop: `2px solid ${active ? 'var(--teal)' : 'transparent'}`,
-              transition: 'color 0.15s',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            {icon}
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-ui)', fontWeight: 500 }}>
-              {label}
-            </span>
-            {dot && (
-              <span style={{
-                position: 'absolute', top: 6, right: '28%',
-                width: 6, height: 6, borderRadius: '50%',
-                background: dot,
-              }} />
-            )}
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
-
-function CodeIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-    </svg>
-  );
-}
-
-function ExamplesIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-      <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-    </svg>
-  );
-}
