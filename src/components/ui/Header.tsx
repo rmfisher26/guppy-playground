@@ -20,15 +20,14 @@ export default function Header() {
   return (
     <header style={{
       height: 'var(--header-h)',
-      background: 'var(--navy)',
+      background: '#ffffff',
       borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center',
       padding: '0 16px', flexShrink: 0, zIndex: 100,
     }}>
       <a href="/" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none', flexShrink:0 }}>
-        <LogoMark />
-        <span style={{ fontFamily:'var(--font-mono)', fontWeight:600, fontSize:14, color:'var(--text-primary)', letterSpacing:'-0.01em' }}>
-          guppy<span style={{ color:'var(--teal)' }}>.</span>play
+        <span style={{ fontFamily:"'Figtree', sans-serif", fontWeight:600, fontSize:15, letterSpacing:'-0.03em', display:'flex', gap:1 }}>
+          <span style={{ color:'#30a08e' }}>GUPPY</span><span style={{ color:'#0a2d54' }}>FISHER</span><span style={{ color:'#000000' }}>&nbsp;POND</span>
         </span>
       </a>
 
@@ -122,17 +121,6 @@ function HeaderLink({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
-function LogoMark() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <rect width="28" height="28" rx="5" fill="#0a1628"/>
-      <path d="M6 14 L14 6 L22 14 L14 22 Z" stroke="#00b4d8" strokeWidth="1.5" fill="none"/>
-      <circle cx="14" cy="14" r="3" fill="#00b4d8"/>
-      <line x1="14" y1="6" x2="14" y2="22" stroke="#00b4d8" strokeWidth="0.75" opacity="0.4"/>
-      <line x1="6"  y1="14" x2="22" y2="14" stroke="#00b4d8" strokeWidth="0.75" opacity="0.4"/>
-    </svg>
-  );
-}
 
 function MoonIcon() {
   return (
