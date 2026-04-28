@@ -2,9 +2,11 @@ import React from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import { encodeShareUrl } from '../../lib/api';
+import { useMobile } from '../../lib/useMobile';
 
 export default function Toolbar() {
   const { shots, setShots, simulator, setSimulator, runState, examples, activeSlot, activeExampleId, setActiveExample, showToast } = usePlaygroundStore();
+  const isMobile = useMobile();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
@@ -62,27 +64,29 @@ export default function Toolbar() {
         }
       </button>
 
-      <Sep />
-
-      {/* Example picker */}
-      <SelectWrap>
-        <select
-          style={{
-            ...selectStyle,
-            color: activeSlot !== 'workspace' ? 'var(--text-secondary)' : 'var(--text-muted)',
-          }}
-          value={activeSlot === 'workspace' ? '' : activeExampleId}
-          onChange={e => handleExampleChange(e.target.value)}
-        >
-          <option value="">— examples —</option>
-          {examples.map(ex => (
-            <option key={ex.id} value={ex.id}>{ex.title}</option>
-          ))}
-        </select>
-        <Chevron />
-      </SelectWrap>
-
-      <Sep />
+      {/* Example picker — desktop only */}
+      {!isMobile && (
+        <>
+          <Sep />
+          <SelectWrap>
+            <select
+              style={{
+                ...selectStyle,
+                color: activeSlot !== 'workspace' ? 'var(--text-secondary)' : 'var(--text-muted)',
+              }}
+              value={activeSlot === 'workspace' ? '' : activeExampleId}
+              onChange={e => handleExampleChange(e.target.value)}
+            >
+              <option value="">— examples —</option>
+              {examples.map(ex => (
+                <option key={ex.id} value={ex.id}>{ex.title}</option>
+              ))}
+            </select>
+            <Chevron />
+          </SelectWrap>
+          <Sep />
+        </>
+      )}
 
       {/* Simulator */}
       <SelectWrap>
@@ -106,25 +110,29 @@ export default function Toolbar() {
 
       <div style={{ flex: 1 }} />
 
-      {/* Share */}
-      <button
-        style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
-        onClick={handleShare}
-        title="Copy share link"
-        onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
-        onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
-      >
-        <ShareIcon /> Share
-      </button>
+      {/* Share — desktop only */}
+      {!isMobile && (
+        <button
+          style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
+          onClick={handleShare}
+          title="Copy share link"
+          onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
+          onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
+        >
+          <ShareIcon /> Share
+        </button>
+      )}
 
-      {/* Version badge */}
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
-        background: 'var(--bg-base)', border: '1px solid var(--border)',
-        borderRadius: 100, padding: '2px 8px',
-      }}>
-        guppylang 0.21.11
-      </span>
+      {/* Version badge — desktop only */}
+      {!isMobile && (
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
+          background: 'var(--bg-base)', border: '1px solid var(--border)',
+          borderRadius: 100, padding: '2px 8px',
+        }}>
+          guppylang 0.21.11
+        </span>
+      )}
     </div>
   );
 }

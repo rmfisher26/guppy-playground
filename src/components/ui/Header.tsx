@@ -2,11 +2,12 @@ import React, { useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import { applyTheme } from '../../lib/store';
 import type { Theme } from '../../lib/store';
+import { useMobile } from '../../lib/useMobile';
 
 export default function Header() {
   const { theme, setTheme } = usePlaygroundStore();
+  const isMobile = useMobile();
 
-  // Apply stored theme on first mount and listen for system preference changes
   useEffect(() => {
     applyTheme(theme);
     if (theme !== 'system') return;
@@ -21,11 +22,8 @@ export default function Header() {
       height: 'var(--header-h)',
       background: 'var(--navy)',
       borderBottom: '1px solid var(--border)',
-      display: 'flex',
-      alignItems: 'center',
-      padding: '0 16px',
-      flexShrink: 0,
-      zIndex: 100,
+      display: 'flex', alignItems: 'center',
+      padding: '0 16px', flexShrink: 0, zIndex: 100,
     }}>
       <a href="/" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none', flexShrink:0 }}>
         <LogoMark />
@@ -33,20 +31,31 @@ export default function Header() {
           guppy<span style={{ color:'var(--teal)' }}>.</span>play
         </span>
       </a>
-      <div style={{ width:1, height:20, background:'var(--border-bright)', margin:'0 16px', flexShrink:0 }} />
-      <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.06em', textTransform:'uppercase' }}>
-        Quantinuum · Selene Emulator
-      </span>
+
+      {!isMobile && (
+        <>
+          <div style={{ width:1, height:20, background:'var(--border-bright)', margin:'0 16px', flexShrink:0 }} />
+          <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.06em', textTransform:'uppercase' }}>
+            Quantinuum · Selene Emulator
+          </span>
+        </>
+      )}
+
       <div style={{ flex:1 }} />
-      <nav style={{ display:'flex', alignItems:'center', gap:8 }}>
+
+      <nav style={{ display:'flex', alignItems:'center', gap: isMobile ? 4 : 8 }}>
         <ThemeToggle current={theme} onChange={setTheme} />
-        <div style={{ width:1, height:16, background:'var(--border-bright)', flexShrink:0 }} />
-        <HeaderLink href="https://github.com/Quantinuum/guppylang">
-          <GithubIcon /> GitHub
-        </HeaderLink>
-        <HeaderLink href="https://docs.quantinuum.com/guppy/">
-          <DocsIcon /> Docs
-        </HeaderLink>
+        {!isMobile && (
+          <>
+            <div style={{ width:1, height:16, background:'var(--border-bright)', flexShrink:0 }} />
+            <HeaderLink href="https://github.com/Quantinuum/guppylang">
+              <GithubIcon /> GitHub
+            </HeaderLink>
+            <HeaderLink href="https://docs.quantinuum.com/guppy/">
+              <DocsIcon /> Docs
+            </HeaderLink>
+          </>
+        )}
       </nav>
     </header>
   );
