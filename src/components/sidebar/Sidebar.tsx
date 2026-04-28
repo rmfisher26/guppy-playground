@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import type { Example } from '../../lib/types';
 
-export default function Sidebar() {
+export default function Sidebar({ open = true, onToggle }: { open?: boolean; onToggle?: () => void }) {
   const {
     examples, activeSlot,
     setActiveExample, setActiveSlot,
@@ -54,75 +54,118 @@ export default function Sidebar() {
 
   return (
     <aside style={{
-      width: 'var(--sidebar-w)', flexShrink: 0,
+      width: open ? 220 : 32,
+      transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
+      flexShrink: 0,
       background: 'var(--bg-surface)', borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
 
-      {/* ── Workspace section ─────────────────────────────────── */}
+      {/* ── Header with toggle ────────────────────────────────── */}
       <div style={{
-        padding: '10px 14px 6px',
-        fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
-        textTransform: 'uppercase', color: 'var(--text-muted)',
-        flexShrink: 0,
+        height: 34, flexShrink: 0,
+        display: 'flex', alignItems: 'center',
+        justifyContent: open ? 'space-between' : 'center',
+        padding: open ? '0 8px 0 14px' : '0',
+        borderBottom: '1px solid var(--border)',
       }}>
-        Workspace
-      </div>
-
-      <WorkspaceItem
-        active={isWorkspaceActive}
-        preview={workspacePreview}
-        onClick={selectWorkspace}
-      />
-
-      <div style={{ height: 1, background: 'var(--border)', margin: '6px 0', flexShrink: 0 }} />
-
-      {/* ── Examples section ──────────────────────────────────── */}
-      <div style={{
-        padding: '6px 14px 4px',
-        fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
-        textTransform: 'uppercase', color: 'var(--text-muted)',
-        flexShrink: 0,
-      }}>
-        Examples
-      </div>
-
-      {/* Search */}
-      <div style={{ padding: '4px 10px 6px', flexShrink: 0 }}>
-        <input
-          type="text"
-          placeholder="Search…"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
+        {open && (
+          <span style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+          }}>
+            Explorer
+          </span>
+        )}
+        <button
+          onClick={onToggle}
+          title={open ? 'Collapse Explorer' : 'Open Explorer'}
           style={{
-            width: '100%', height: 24, background: 'var(--bg-base)',
-            border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-            color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-            fontSize: 11, padding: '0 8px', outline: 'none',
+            width: 22, height: 22, border: 'none', background: 'transparent',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--text-muted)', borderRadius: 3, padding: 0, flexShrink: 0,
           }}
-        />
+          onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.color = 'var(--text-secondary)'; el.style.background = 'var(--bg-raised)'; }}
+          onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.color = 'var(--text-muted)'; el.style.background = 'transparent'; }}
+        >
+          {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+        </button>
       </div>
 
-      {/* Example list */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 6 }}>
-        {Array.from(groups.entries()).map(([group, items]) => (
-          <div key={group} style={{ marginBottom: 2 }}>
-            <div style={{
-              padding: '4px 14px 2px', fontSize: 10, fontWeight: 600,
-              letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)',
-            }}>
-              {group}
+      {/* ── Scrollable content (fades when collapsed) ─────────── */}
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        opacity: open ? 1 : 0,
+        transition: 'opacity 0.12s',
+        pointerEvents: open ? 'auto' : 'none',
+      }}>
+
+        {/* Workspace section */}
+        <div style={{
+          padding: '10px 14px 6px',
+          fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: 'var(--text-muted)',
+          flexShrink: 0,
+        }}>
+          Workspace
+        </div>
+
+        <WorkspaceItem
+          active={isWorkspaceActive}
+          preview={workspacePreview}
+          onClick={selectWorkspace}
+        />
+
+        <div style={{ height: 1, background: 'var(--border)', margin: '6px 0', flexShrink: 0 }} />
+
+        {/* Examples section */}
+        <div style={{
+          padding: '6px 14px 4px',
+          fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: 'var(--text-muted)',
+          flexShrink: 0,
+        }}>
+          Examples
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '4px 10px 6px', flexShrink: 0 }}>
+          <input
+            type="text"
+            placeholder="Search…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            style={{
+              width: '100%', height: 24, background: 'var(--bg-base)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+              fontSize: 11, padding: '0 8px', outline: 'none',
+            }}
+          />
+        </div>
+
+        {/* Example list */}
+        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 6 }}>
+          {Array.from(groups.entries()).map(([group, items]) => (
+            <div key={group} style={{ marginBottom: 2 }}>
+              <div style={{
+                padding: '4px 14px 2px', fontSize: 10, fontWeight: 600,
+                letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)',
+              }}>
+                {group}
+              </div>
+              {items.map(ex => (
+                <ExampleItem
+                  key={ex.id}
+                  example={ex}
+                  active={activeSlot === ex.id}
+                  onClick={() => selectExample(ex)}
+                />
+              ))}
             </div>
-            {items.map(ex => (
-              <ExampleItem
-                key={ex.id}
-                example={ex}
-                active={activeSlot === ex.id}
-                onClick={() => selectExample(ex)}
-              />
-            ))}
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </aside>
   );
@@ -259,5 +302,21 @@ function ExampleItem({
         {example.qubit_count}q
       </span>
     </div>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
   );
 }

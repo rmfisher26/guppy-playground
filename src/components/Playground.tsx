@@ -28,6 +28,9 @@ export default function Playground() {
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
+  // Sidebar collapse (desktop)
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   // Mobile state
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('main');
   const [mobileSplitPct, setMobileSplitPct] = useState(55);
@@ -162,7 +165,7 @@ export default function Playground() {
       <Header />
       <Toolbar />
       <div ref={containerRef} style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Sidebar />
+        <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
         <EditorPane />
         <div
           onMouseDown={onDividerMouseDown}
