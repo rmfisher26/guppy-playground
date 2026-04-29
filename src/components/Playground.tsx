@@ -11,7 +11,10 @@ import Sidebar from './sidebar/Sidebar';
 import EditorPane from './editor/EditorPane';
 import OutputPane from './output/OutputPane';
 const OUTPUT_MIN = 200;
-const OUTPUT_MAX_MARGIN = 200;
+const EDITOR_MIN = 200;
+const SIDEBAR_W_OPEN = 220;
+const SIDEBAR_W_CLOSED = 32;
+const DIVIDER_W = 5;
 
 export default function Playground() {
   const { setExamples, setActiveSlot, setSource, setModified } = usePlaygroundStore();
@@ -26,6 +29,8 @@ export default function Playground() {
 
   // Sidebar collapse (desktop)
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const sidebarOpenRef = useRef(true);
+  useEffect(() => { sidebarOpenRef.current = sidebarOpen; }, [sidebarOpen]);
 
   const [mobileSplitPct, setMobileSplitPct] = useState(55);
   const [mobileDividerActive, setMobileDividerActive] = useState(false);
@@ -72,7 +77,9 @@ export default function Playground() {
       if (!dragging.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const newW = rect.right - e.clientX;
-      setOutputWidth(Math.max(OUTPUT_MIN, Math.min(newW, rect.width - OUTPUT_MAX_MARGIN)));
+      const sidebarW = sidebarOpenRef.current ? SIDEBAR_W_OPEN : SIDEBAR_W_CLOSED;
+      const maxW = rect.width - sidebarW - DIVIDER_W - EDITOR_MIN;
+      setOutputWidth(Math.max(OUTPUT_MIN, Math.min(newW, maxW)));
     };
     const onMouseUp = () => {
       if (!dragging.current) return;
