@@ -62,7 +62,7 @@ export default function Toolbar() {
         }
       </button>
 
-      <div style={{ flex: 1 }} />
+      <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
 
       {/* Simulator */}
       <CustomSelect
@@ -79,6 +79,8 @@ export default function Toolbar() {
         options={shotOptions}
         suffix="shots"
       />
+
+      <div style={{ flex: 1 }} />
 
       {/* Share — desktop only */}
       {!isMobile && (
