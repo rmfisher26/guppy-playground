@@ -172,7 +172,7 @@ function PrettyError({ message }: { message: string }) {
                 <span style={{ whiteSpace: 'pre', color: 'var(--yellow)' }}>
                   {caretMatch[1]}{caretMatch[2]}
                 </span>
-                <span style={{ color: 'var(--text-secondary)' }}>{caretMatch[3]}</span>
+                <span style={{ color: 'var(--yellow)' }}>{caretMatch[3]}</span>
               </div>
             );
           }
