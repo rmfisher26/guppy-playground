@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { EditorState, StateEffect, StateField, RangeSet, Compartment } from '@codemirror/state';
 import { EditorView, Decoration, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
-import { defaultKeymap, indentWithTab } from '@codemirror/commands';
+import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands';
 import { python } from '@codemirror/lang-python';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
@@ -176,7 +176,8 @@ export default function GuppyEditor({ onReady }: GuppyEditorProps) {
         themeCompartment.of(buildThemeExtensions(resolveIsDark(usePlaygroundStore.getState().theme))),
         errorField,
         updateListener,
-        keymap.of([...defaultKeymap, indentWithTab]),
+        history(),
+        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         EditorView.lineWrapping,
         EditorState.tabSize.of(4),
       ],
