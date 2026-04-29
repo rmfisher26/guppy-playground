@@ -20,14 +20,14 @@ export default function Header() {
   return (
     <header style={{
       height: 'var(--header-h)',
-      background: '#ffffff',
+      background: 'var(--bg-surface)',
       borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center',
       padding: '0 16px', flexShrink: 0, zIndex: 100,
     }}>
       <a href="/" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none', flexShrink:0 }}>
         <span style={{ fontFamily:"'Figtree', sans-serif", fontWeight:600, fontSize:15, letterSpacing:'-0.03em', display:'flex', gap:1 }}>
-          <span style={{ color:'#30a08e' }}>GUPPY</span><span style={{ color:'#0a2d54' }}>FISHER</span><span style={{ color:'#000000' }}>&nbsp;POND</span>
+          <span style={{ color:'#30a08e' }}>GUPPY</span><span style={{ color:'var(--logo-fisher)' }}>FISHER</span><span style={{ color:'var(--text-primary)' }}>&nbsp;POND</span>
         </span>
       </a>
 
