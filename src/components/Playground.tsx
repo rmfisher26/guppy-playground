@@ -134,7 +134,7 @@ export default function Playground() {
             }}
           />
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <OutputPane />
+            <OutputPane isMobile />
           </div>
         </div>
         <Toast />

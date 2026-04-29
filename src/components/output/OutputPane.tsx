@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import TerminalOutput from './TerminalOutput';
@@ -6,77 +6,175 @@ import ResultsTab from './ResultsTab';
 import HugrTab from './HugrTab';
 import type { OutputTab, RunState } from '../../lib/types';
 
-// Register keyboard shortcut (hook must be used in a component)
+const OUTPUT_PANEL_MIN = 80;
+const OUTPUT_PANEL_MAX_MARGIN = 80;
+
 function RunShortcutRegistrar() {
   useRun();
   return null;
 }
 
-export default function OutputPane() {
+export default function OutputPane({ isMobile = false }: { isMobile?: boolean }) {
   const { activeTab, setActiveTab, runState, runId } = usePlaygroundStore();
-
   const statusInfo = getStatusInfo(runState);
 
-  const tabs: { id: OutputTab; label: string }[] = [
-    { id: 'output',  label: 'Output'  },
+  // Desktop: resizable output panel height at the bottom
+  const [outputPanelHeight, setOutputPanelHeight] = useState(200);
+  const [splitDividerActive, setSplitDividerActive] = useState(false);
+  const [splitDividerHovered, setSplitDividerHovered] = useState(false);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const splitDragging = useRef(false);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!splitDragging.current || !paneRef.current) return;
+      const rect = paneRef.current.getBoundingClientRect();
+      const newH = rect.bottom - e.clientY - 28; // 28 = status bar height
+      setOutputPanelHeight(
+        Math.max(OUTPUT_PANEL_MIN, Math.min(newH, rect.height - OUTPUT_PANEL_MAX_MARGIN - 34 - 28))
+      );
+    };
+    const onMouseUp = () => {
+      if (!splitDragging.current) return;
+      splitDragging.current = false;
+      setSplitDividerActive(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
+  function onSplitDividerMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    splitDragging.current = true;
+    setSplitDividerActive(true);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  // Mobile: 3 tabs as before
+  if (isMobile) {
+    const allTabs: { id: OutputTab; label: string }[] = [
+      { id: 'output',  label: 'Output'  },
+      { id: 'results', label: 'Results' },
+      { id: 'hugr',    label: 'HUGR'    },
+    ];
+    return (
+      <div style={{
+        width: '100%', height: '100%',
+        display: 'flex', flexDirection: 'column', background: 'var(--bg-base)',
+      }}>
+        <RunShortcutRegistrar />
+        <div style={{
+          height: 34, background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'flex-end',
+          padding: '0 12px', flexShrink: 0,
+        }}>
+          {allTabs.map(tab => (
+            <TabButton
+              key={tab.id}
+              label={tab.label}
+              active={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            />
+          ))}
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {activeTab === 'output'  && <TerminalOutput />}
+          {activeTab === 'results' && <ResultsTab />}
+          {activeTab === 'hugr'    && <HugrTab key={runId} />}
+        </div>
+        <StatusBar statusInfo={statusInfo} runState={runState} />
+      </div>
+    );
+  }
+
+  // Desktop: Results/HUGR tabs on top, Output panel fixed at bottom
+  const topTabs: { id: OutputTab; label: string }[] = [
     { id: 'results', label: 'Results' },
     { id: 'hugr',    label: 'HUGR'    },
   ];
+  // If activeTab is 'output' (e.g. switched from mobile), treat 'results' as selected
+  const topActiveTab: OutputTab = activeTab === 'output' ? 'results' : activeTab;
+
+  const splitHighlighted = splitDividerActive || splitDividerHovered;
 
   return (
-    <div style={{
+    <div ref={paneRef} style={{
       width: '100%', height: '100%',
       display: 'flex', flexDirection: 'column', background: 'var(--bg-base)',
     }}>
       <RunShortcutRegistrar />
 
-      {/* Tab bar */}
-      <div style={{
-        height: 34, background: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'flex-end',
-        padding: '0 12px', flexShrink: 0,
-      }}>
-        {tabs.map(tab => (
-          <TabButton
-            key={tab.id}
-            label={tab.label}
-            active={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
-          />
-        ))}
+      {/* Top: Results / HUGR tabs */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+        <div style={{
+          height: 34, background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'flex-end',
+          padding: '0 12px', flexShrink: 0,
+        }}>
+          {topTabs.map(tab => (
+            <TabButton
+              key={tab.id}
+              label={tab.label}
+              active={topActiveTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            />
+          ))}
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {topActiveTab === 'results' && <ResultsTab />}
+          {topActiveTab === 'hugr'    && <HugrTab key={runId} />}
+        </div>
       </div>
 
-      {/* Tab content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {activeTab === 'output'  && <TerminalOutput />}
-        {activeTab === 'results' && <ResultsTab />}
-        {activeTab === 'hugr'    && <HugrTab key={runId} />}
+      {/* Horizontal resize divider */}
+      <div
+        onMouseDown={onSplitDividerMouseDown}
+        onMouseEnter={() => setSplitDividerHovered(true)}
+        onMouseLeave={() => setSplitDividerHovered(false)}
+        style={{
+          height: 5, flexShrink: 0, cursor: 'row-resize', zIndex: 10,
+          background: splitHighlighted ? 'var(--teal)' : 'var(--border)',
+          transition: splitDividerActive ? 'none' : 'background 0.15s',
+        }}
+      />
+
+      {/* Bottom: Output panel */}
+      <div style={{
+        height: outputPanelHeight, flexShrink: 0,
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        <div style={{
+          height: 34, background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'flex-end',
+          padding: '0 12px', flexShrink: 0,
+        }}>
+          <TabButton label="Output" active={false} onClick={() => {}} asLabel />
+        </div>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <TerminalOutput />
+        </div>
       </div>
 
-      {/* Status bar */}
-      <div style={{
-        height: 28, background: 'var(--bg-surface)',
-        borderTop: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center',
-        padding: '0 14px', gap: 8, flexShrink: 0,
-      }}>
-        <StatusDot color={statusInfo.dotColor} pulse={statusInfo.pulse} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-          {statusInfo.text}
-        </span>
-        <div style={{ flex: 1 }} />
-        {runState.status === 'success' && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        )}
-      </div>
+      <StatusBar statusInfo={statusInfo} runState={runState} />
     </div>
   );
 }
 
-function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function TabButton({
+  label, active, onClick, asLabel,
+}: {
+  label: string; active: boolean; onClick: () => void; asLabel?: boolean;
+}) {
   const [hovered, setHovered] = React.useState(false);
   return (
     <button
@@ -86,15 +184,44 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
       style={{
         height: 34, padding: '0 12px',
         fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 500,
-        color: active ? 'var(--text-primary)' : hovered ? 'var(--text-secondary)' : 'var(--text-muted)',
+        color: asLabel
+          ? 'var(--text-secondary)'
+          : active
+          ? 'var(--text-primary)'
+          : hovered
+          ? 'var(--text-secondary)'
+          : 'var(--text-muted)',
         background: 'transparent', border: 'none',
         borderBottom: active ? '2px solid var(--teal)' : '2px solid transparent',
-        cursor: 'pointer', transition: 'color 0.15s',
+        cursor: asLabel ? 'default' : 'pointer',
+        transition: 'color 0.15s',
         whiteSpace: 'nowrap',
       }}
     >
       {label}
     </button>
+  );
+}
+
+function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof getStatusInfo>; runState: RunState }) {
+  return (
+    <div style={{
+      height: 28, background: 'var(--bg-surface)',
+      borderTop: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center',
+      padding: '0 14px', gap: 8, flexShrink: 0,
+    }}>
+      <StatusDot color={statusInfo.dotColor} pulse={statusInfo.pulse} />
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+        {statusInfo.text}
+      </span>
+      <div style={{ flex: 1 }} />
+      {runState.status === 'success' && (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+          {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      )}
+    </div>
   );
 }
 
