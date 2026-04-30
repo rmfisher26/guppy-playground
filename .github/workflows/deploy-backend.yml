@@ -10,8 +10,8 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
-  REPO: guppyfisher
-  SERVICE: guppyfisher-backend
+  REPO: guppy-playground
+  SERVICE: guppy-playground-backend
 
 jobs:
   deploy:
