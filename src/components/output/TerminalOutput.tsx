@@ -8,8 +8,13 @@ export default function TerminalOutput() {
     <div style={{
       flex: 1, padding: 16, fontFamily: 'var(--font-mono)',
       fontSize: 12, lineHeight: 1.7, overflowY: 'auto',
-      background: 'var(--bg-base)',
-    }}>
+      background: '#0d1117',
+      // Pin CSS variables to dark-terminal values so light theme doesn't break visibility
+      '--text-primary':   '#e6edf3',
+      '--text-secondary': '#e6edf3',
+      '--text-muted':     '#6e7681',
+      '--border':         '#30363d',
+    } as React.CSSProperties}>
       <TerminalContent state={runState} />
     </div>
   );
@@ -167,7 +172,7 @@ function PrettyError({ message }: { message: string }) {
                 <span style={{ whiteSpace: 'pre', color: 'var(--yellow)' }}>
                   {caretMatch[1]}{caretMatch[2]}
                 </span>
-                <span style={{ color: 'var(--text-secondary)' }}>{caretMatch[3]}</span>
+                <span style={{ color: 'var(--yellow)' }}>{caretMatch[3]}</span>
               </div>
             );
           }

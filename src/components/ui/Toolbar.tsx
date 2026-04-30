@@ -1,20 +1,15 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import { encodeShareUrl } from '../../lib/api';
+import { useMobile } from '../../lib/useMobile';
+import type { SimulatorBackend } from '../../lib/types';
 
 export default function Toolbar() {
-  const { shots, setShots, simulator, setSimulator, runState, examples, activeSlot, activeExampleId, setActiveExample, showToast } = usePlaygroundStore();
+  const { shots, setShots, simulator, setSimulator, runState, showToast } = usePlaygroundStore();
+  const isMobile = useMobile();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
-
-  function handleExampleChange(id: string) {
-    const ex = examples.find(e => e.id === id);
-    if (!ex) return;
-    setActiveExample(id);
-    setSource(ex.source);
-    setModified(false);
-  }
 
   function handleShare() {
     const source = usePlaygroundStore.getState().source;
@@ -31,12 +26,17 @@ export default function Toolbar() {
     transition: 'all 0.15s', whiteSpace: 'nowrap',
   };
 
-  const selectStyle: React.CSSProperties = {
-    height: 28, padding: '0 28px 0 10px', background: 'var(--bg-raised)',
-    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-    color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)', fontSize: 12,
-    cursor: 'pointer', appearance: 'none' as any, outline: 'none',
-  };
+  const simulatorOptions: SelectOption<SimulatorBackend>[] = [
+    { value: 'stabilizer',  label: 'Stabilizer',  tag: 'Stim'  },
+    { value: 'statevector', label: 'Statevector',  tag: 'QuEST' },
+  ];
+
+  const shotOptions: SelectOption<number>[] = [
+    { value: 256,  label: '256'  },
+    { value: 1024, label: '1024' },
+    { value: 4096, label: '4096' },
+    { value: 8192, label: '8192' },
+  ];
 
   return (
     <div style={{
@@ -62,99 +62,219 @@ export default function Toolbar() {
         }
       </button>
 
-      <Sep />
-
-      {/* Example picker */}
-      <SelectWrap>
-        <select
-          style={{
-            ...selectStyle,
-            color: activeSlot !== 'workspace' ? 'var(--text-secondary)' : 'var(--text-muted)',
-          }}
-          value={activeSlot === 'workspace' ? '' : activeExampleId}
-          onChange={e => handleExampleChange(e.target.value)}
-        >
-          <option value="">— examples —</option>
-          {examples.map(ex => (
-            <option key={ex.id} value={ex.id}>{ex.title}</option>
-          ))}
-        </select>
-        <Chevron />
-      </SelectWrap>
-
-      <Sep />
+      <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
 
       {/* Simulator */}
-      <SelectWrap>
-        <select style={selectStyle} value={simulator} onChange={e => setSimulator(e.target.value as any)}>
-          <option value="stabilizer">Stabilizer (Stim)</option>
-          <option value="statevector">Statevector (QuEST)</option>
-        </select>
-        <Chevron />
-      </SelectWrap>
+      <CustomSelect
+        value={simulator}
+        onChange={v => setSimulator(v)}
+        options={simulatorOptions}
+        suffix="shots"
+      />
 
       {/* Shots */}
-      <SelectWrap>
-        <select style={selectStyle} value={shots} onChange={e => setShots(Number(e.target.value))}>
-          <option value={256}>256 shots</option>
-          <option value={1024}>1024 shots</option>
-          <option value={4096}>4096 shots</option>
-          <option value={8192}>8192 shots</option>
-        </select>
-        <Chevron />
-      </SelectWrap>
+      <CustomSelect
+        value={shots}
+        onChange={v => setShots(v)}
+        options={shotOptions}
+        suffix="shots"
+      />
 
       <div style={{ flex: 1 }} />
 
-      {/* Share */}
-      <button
-        style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
-        onClick={handleShare}
-        title="Copy share link"
-        onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
-        onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
-      >
-        <ShareIcon /> Share
-      </button>
+      {/* Share — desktop only */}
+      {!isMobile && (
+        <button
+          style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
+          onClick={handleShare}
+          title="Copy share link"
+          onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
+          onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
+        >
+          <ShareIcon /> Share
+        </button>
+      )}
 
-      {/* Version badge */}
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
-        background: 'var(--bg-base)', border: '1px solid var(--border)',
-        borderRadius: 100, padding: '2px 8px',
-      }}>
-        guppylang 0.21.11
-      </span>
+      {/* Version badge — desktop only */}
+      {!isMobile && (
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
+          background: 'var(--bg-base)', border: '1px solid var(--border)',
+          borderRadius: 100, padding: '2px 8px',
+        }}>
+          guppylang 0.21.11
+        </span>
+      )}
     </div>
   );
 }
 
-function Sep() {
-  return <div style={{ width:1, height:18, background:'var(--border)', margin:'0 2px', flexShrink:0 }} />;
+// ── Custom select ─────────────────────────────────────────────────────────────
+
+type SelectOption<T> = { value: T; label: string; tag?: string };
+
+function CustomSelect<T extends string | number>({
+  value, onChange, options, suffix,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: SelectOption<T>[];
+  suffix?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const current = options.find(o => o.value === value);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      {/* Trigger */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          height: 28, padding: '0 8px 0 10px',
+          background: open ? 'var(--bg-hover)' : 'var(--bg-raised)',
+          border: `1px solid ${open ? 'var(--teal)' : 'var(--border)'}`,
+          borderRadius: 'var(--radius-sm)',
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 5,
+          transition: 'border-color 0.15s, background 0.15s',
+          whiteSpace: 'nowrap',
+        }}
+        onMouseEnter={e => { if (!open) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-bright)'; }}
+        onMouseLeave={e => { if (!open) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+      >
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+          {current?.label}
+        </span>
+        {current?.tag && (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
+            background: 'var(--bg-base)', border: '1px solid var(--border)',
+            borderRadius: 3, padding: '1px 4px', lineHeight: 1.4,
+          }}>
+            {current.tag}
+          </span>
+        )}
+        {!current?.tag && suffix && (
+          <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--text-muted)' }}>
+            {suffix}
+          </span>
+        )}
+        <ChevronIcon open={open} />
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', right: 0,
+          background: 'var(--bg-raised)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          zIndex: 200,
+          overflow: 'hidden',
+          minWidth: '100%',
+          animation: 'fadeSlideIn 0.1s ease',
+        }}>
+          {options.map(opt => (
+            <DropdownOption
+              key={String(opt.value)}
+              label={opt.label}
+              tag={opt.tag}
+              suffix={!opt.tag ? suffix : undefined}
+              active={opt.value === value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function SelectWrap({ children }: { children: React.ReactNode }) {
-  return <div style={{ position:'relative', display:'flex', alignItems:'center' }}>{children}</div>;
+function DropdownOption({ label, tag, suffix, active, onClick }: {
+  label: string; tag?: string; suffix?: string; active: boolean; onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: '100%', padding: '6px 12px 6px 10px',
+        background: active ? 'var(--teal-subtle)' : hovered ? 'var(--bg-hover)' : 'transparent',
+        border: 'none', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 7,
+        textAlign: 'left',
+        borderLeft: `2px solid ${active ? 'var(--teal)' : 'transparent'}`,
+        transition: 'background 0.1s',
+      }}
+    >
+      <span style={{
+        fontFamily: 'var(--font-ui)', fontSize: 12,
+        fontWeight: active ? 500 : 400,
+        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+        flex: 1,
+      }}>
+        {label}
+      </span>
+      {tag && (
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10,
+          color: active ? 'var(--text-teal)' : 'var(--text-muted)',
+          background: active ? 'var(--teal-subtle)' : 'var(--bg-base)',
+          border: `1px solid ${active ? 'var(--teal-dim)' : 'var(--border)'}`,
+          borderRadius: 3, padding: '1px 4px', lineHeight: 1.4,
+        }}>
+          {tag}
+        </span>
+      )}
+      {!tag && suffix && (
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--text-muted)' }}>
+          {suffix}
+        </span>
+      )}
+    </button>
+  );
 }
 
-function Chevron() {
-  return <span style={{ position:'absolute', right:8, pointerEvents:'none', color:'var(--text-muted)', fontSize:9 }}>▾</span>;
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="10" height="10" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      style={{ color: 'var(--text-muted)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
 }
 
 function Spinner() {
   return (
     <span style={{
-      width:10, height:10, border:'1.5px solid var(--navy)',
-      borderTopColor:'transparent', borderRadius:'50%',
-      display:'inline-block', animation:'spin 0.6s linear infinite',
+      width: 10, height: 10, border: '1.5px solid var(--navy)',
+      borderTopColor: 'transparent', borderRadius: '50%',
+      display: 'inline-block', animation: 'spin 0.6s linear infinite',
     }} />
   );
 }
 
 function PlayIcon() {
-  return <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+  return <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>;
 }
 
 function ShareIcon() {
-  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>;
+  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>;
 }

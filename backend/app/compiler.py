@@ -29,6 +29,7 @@ async def compile_and_simulate(
     simulator: str,
     seed: int | None = None,
     entry_point: str | None = None,
+    filename: str = "main.py",
 ) -> tuple[CompileSuccess, SimulationResults] | list[CompileError]:
     """Run compile + simulate in one sandboxed subprocess.
 
@@ -41,6 +42,7 @@ async def compile_and_simulate(
         [sys.executable, str(WORKER)],
         input_data=json.dumps({
             "source":    source,
+            "filename":  filename,
             "shots":     shots,
             "simulator": simulator,
             "seed":      seed,

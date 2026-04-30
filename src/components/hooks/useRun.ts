@@ -2,6 +2,16 @@ import { useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import { run as apiRun } from '../../lib/api';
 
+// Derive the display filename from the active slot and example list.
+// Matches what the user sees in the editor header.
+function deriveFilename(activeSlot: string, examples: { id: string }[]): string {
+  if (activeSlot === 'workspace') return 'main.py';
+  const ex = examples.find(e => e.id === activeSlot);
+  if (!ex) return 'main.py';
+  // "bell" → "bell.py", "repeat-until-success" → "repeat_until_success.py"
+  return ex.id.replace(/-/g, '_') + '.py';
+}
+
 export function useRun() {
   const store = usePlaygroundStore();
 
@@ -18,32 +28,30 @@ export function useRun() {
   }, []);
 
   async function run() {
-    const { source, shots, simulator, seed, setRunState, setActiveTab } = usePlaygroundStore.getState();
+    const { source, shots, simulator, seed, activeSlot, examples, setRunState, setActiveTab } =
+      usePlaygroundStore.getState();
+
     const isRunning = store.runState.status === 'compiling' || store.runState.status === 'simulating';
     if (isRunning) return;
 
+    const filename = deriveFilename(activeSlot, examples);
     const start = performance.now();
 
-    // Step 1: compiling
     setRunState({ status: 'compiling' });
     setActiveTab('output');
 
     try {
-      // Small delay so "Compiling…" state is visible before response
-      const response = await apiRun({ source, shots, simulator, seed });
+      const response = await apiRun({ source, filename, shots, simulator, seed });
       const elapsed_ms = Math.round(performance.now() - start);
 
       if (response.status === 'ok') {
         setRunState({ status: 'success', response, elapsed_ms });
-        // Auto-switch to results tab on success
         setActiveTab('results');
       } else if (response.status === 'compile_error') {
         setRunState({ status: 'compile_error', errors: response.errors ?? [] });
         setActiveTab('output');
       } else if (response.status === 'timeout') {
         setRunState({ status: 'timeout' });
-      } else if (response.status === 'rate_limited') {
-        setRunState({ status: 'rate_limited', retry_after_ms: response.retry_after_ms ?? 5000 });
       } else {
         setRunState({ status: 'internal_error', message: response.message ?? 'Unknown error' });
       }

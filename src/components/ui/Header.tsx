@@ -1,39 +1,103 @@
-import React from 'react';
-
-const s: Record<string, React.CSSProperties> = {};
+import React, { useEffect } from 'react';
+import { usePlaygroundStore } from '../../lib/store';
+import { applyTheme } from '../../lib/store';
+import type { Theme } from '../../lib/store';
+import { useMobile } from '../../lib/useMobile';
 
 export default function Header() {
+  const { theme, setTheme } = usePlaygroundStore();
+  const isMobile = useMobile();
+
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const handler = () => applyTheme('system');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [theme]);
+
   return (
     <header style={{
       height: 'var(--header-h)',
-      background: 'var(--navy)',
+      background: 'var(--bg-surface)',
       borderBottom: '1px solid var(--border)',
-      display: 'flex',
-      alignItems: 'center',
-      padding: '0 16px',
-      flexShrink: 0,
-      zIndex: 100,
+      display: 'flex', alignItems: 'center',
+      padding: '0 16px', flexShrink: 0, zIndex: 100,
     }}>
       <a href="/" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none', flexShrink:0 }}>
-        <LogoMark />
-        <span style={{ fontFamily:'var(--font-mono)', fontWeight:600, fontSize:14, color:'var(--text-primary)', letterSpacing:'-0.01em' }}>
-          guppy<span style={{ color:'var(--teal)' }}>.</span>play
+        <span style={{ fontFamily:"'Figtree', sans-serif", fontWeight:600, fontSize:15, letterSpacing:'-0.03em', display:'flex', gap:1 }}>
+          <span style={{ color:'#30a08e' }}>GUPPY</span><span style={{ color:'var(--logo-fisher)' }}>FISHER</span><span style={{ color:'var(--text-primary)' }}>&nbsp;POND</span>
         </span>
       </a>
-      <div style={{ width:1, height:20, background:'var(--border-bright)', margin:'0 16px', flexShrink:0 }} />
-      <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.06em', textTransform:'uppercase' }}>
-        Quantinuum · Selene Emulator
-      </span>
+
+      {!isMobile && (
+        <>
+          <div style={{ width:1, height:20, background:'var(--border-bright)', margin:'0 16px', flexShrink:0 }} />
+          <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.06em', textTransform:'uppercase' }}>
+            Quantinuum · Selene Emulator
+          </span>
+        </>
+      )}
+
       <div style={{ flex:1 }} />
-      <nav style={{ display:'flex', alignItems:'center', gap:4 }}>
-        <HeaderLink href="https://github.com/Quantinuum/guppylang">
-          <GithubIcon /> GitHub
-        </HeaderLink>
-        <HeaderLink href="https://docs.quantinuum.com/guppy/">
-          <DocsIcon /> Docs
-        </HeaderLink>
+
+      <nav style={{ display:'flex', alignItems:'center', gap: isMobile ? 4 : 8 }}>
+        <ThemeToggle current={theme} onChange={setTheme} />
+        {!isMobile && (
+          <>
+            <div style={{ width:1, height:16, background:'var(--border-bright)', flexShrink:0 }} />
+            <HeaderLink href="https://github.com/Quantinuum/guppylang">
+              <GithubIcon /> GitHub
+            </HeaderLink>
+            <HeaderLink href="https://docs.quantinuum.com/guppy/">
+              <DocsIcon /> Docs
+            </HeaderLink>
+          </>
+        )}
       </nav>
     </header>
+  );
+}
+
+function ThemeToggle({ current, onChange }: { current: Theme; onChange: (t: Theme) => void }) {
+  const options: { value: Theme; icon: React.ReactNode; label: string }[] = [
+    { value: 'dark',   icon: <MoonIcon />,    label: 'Dark'   },
+    { value: 'light',  icon: <SunIcon />,     label: 'Light'  },
+    { value: 'system', icon: <MonitorIcon />, label: 'System' },
+  ];
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      background: 'rgba(255,255,255,0.06)',
+      border: '1px solid var(--border-bright)',
+      borderRadius: 'var(--radius)',
+      padding: 2, gap: 1,
+    }}>
+      {options.map(({ value, icon, label }) => {
+        const active = current === value;
+        return (
+          <button
+            key={value}
+            onClick={() => onChange(value)}
+            title={label}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 22, border: 'none', borderRadius: 4,
+              cursor: 'pointer',
+              background: active ? 'var(--teal)' : 'transparent',
+              color: active ? '#fff' : 'var(--text-muted)',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}
+            onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; }}
+          >
+            {icon}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -44,16 +108,10 @@ function HeaderLink({ href, children }: { href: string; children: React.ReactNod
       target="_blank"
       rel="noreferrer"
       style={{
-        height: 28,
-        padding: '0 10px',
-        borderRadius: 'var(--radius-sm)',
-        color: 'var(--text-secondary)',
-        fontSize: 12,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        textDecoration: 'none',
-        transition: 'color 0.15s',
+        height: 28, padding: '0 10px', borderRadius: 'var(--radius-sm)',
+        color: 'var(--text-secondary)', fontSize: 12,
+        display: 'flex', alignItems: 'center', gap: 5,
+        textDecoration: 'none', transition: 'color 0.15s',
       }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; (e.currentTarget as HTMLElement).style.background = 'var(--bg-raised)'; }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -63,14 +121,37 @@ function HeaderLink({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
-function LogoMark() {
+
+function MoonIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <rect width="28" height="28" rx="5" fill="#0a1628"/>
-      <path d="M6 14 L14 6 L22 14 L14 22 Z" stroke="#00b4d8" strokeWidth="1.5" fill="none"/>
-      <circle cx="14" cy="14" r="3" fill="#00b4d8"/>
-      <line x1="14" y1="6" x2="14" y2="22" stroke="#00b4d8" strokeWidth="0.75" opacity="0.4"/>
-      <line x1="6"  y1="14" x2="22" y2="14" stroke="#00b4d8" strokeWidth="0.75" opacity="0.4"/>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  );
+}
+
+function MonitorIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+      <line x1="8" y1="21" x2="16" y2="21"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
     </svg>
   );
 }

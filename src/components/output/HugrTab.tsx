@@ -15,6 +15,7 @@ const TYPE_STYLES: Record<string, { bg: string; color: string }> = {
 
 export default function HugrTab() {
   const { runState } = usePlaygroundStore();
+  const [jsonOpen, setJsonOpen] = useState(false);
 
   if (runState.status !== 'success' || !runState.response.compile) {
     return (
@@ -37,11 +38,29 @@ export default function HugrTab() {
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
       <div style={{
-        fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
-        textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12,
+        display: 'flex', alignItems: 'center', marginBottom: 12,
       }}>
-        HUGR IR · {node_count} nodes
+        <span style={{
+          fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: 'var(--text-muted)', flex: 1,
+        }}>
+          HUGR IR · {node_count} nodes
+        </span>
+        <JsonToggleButton active={jsonOpen} onClick={() => setJsonOpen(o => !o)} />
       </div>
+
+      {jsonOpen && (
+        <pre style={{
+          margin: '0 0 12px', padding: 12,
+          background: 'var(--bg-base)', borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)',
+          fontSize: 11, lineHeight: 1.6,
+          overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+        }}>
+          {JSON.stringify(runState, null, 2)}
+        </pre>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {hugr_nodes.map((node) => (
@@ -103,5 +122,29 @@ function HugrNodeRow({ node }: { node: HugrNode }) {
         {node.meta}
       </span>
     </div>
+  );
+}
+
+function JsonToggleButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={active ? 'Hide JSON' : 'Show run state JSON'}
+      style={{
+        height: 22, padding: '0 7px',
+        background: active ? 'var(--teal-subtle)' : hovered ? 'var(--bg-raised)' : 'transparent',
+        border: `1px solid ${active ? 'var(--teal-dim)' : hovered ? 'var(--border-bright)' : 'var(--border)'}`,
+        borderRadius: 'var(--radius-sm)',
+        color: active ? 'var(--text-teal)' : 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
+        cursor: 'pointer', letterSpacing: '0.04em',
+        transition: 'all 0.15s', flexShrink: 0,
+      }}
+    >
+      {'{ }'}
+    </button>
   );
 }
