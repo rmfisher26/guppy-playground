@@ -41,29 +41,32 @@ uvicorn app.main:app --reload --port 8000
 guppy-playground/
 ├── src/
 │   ├── components/
+│   │   ├── Playground.tsx  # Root layout component
 │   │   ├── ui/             # Header, Toolbar, Toast
 │   │   ├── sidebar/        # Example list
-│   │   ├── editor/         # CodeMirror 6 + error decorations
-│   │   ├── output/         # Terminal, Results (Recharts), HUGR tab
+│   │   ├── editor/         # EditorPane, GuppyEditor (CodeMirror 6 + error decorations)
+│   │   ├── output/         # OutputPane, TerminalOutput, ResultsTab, HugrTab
 │   │   └── hooks/          # useRun — run lifecycle + Ctrl+Enter
 │   ├── lib/
 │   │   ├── api.ts          # Typed fetch client
 │   │   ├── store.ts        # Zustand global state
 │   │   ├── types.ts        # Shared TypeScript types
-│   │   └── examples.ts     # Static fallback examples
+│   │   ├── examples.ts     # Static fallback examples
+│   │   ├── defaultSource.ts # Default editor program
+│   │   └── useMobile.ts    # Responsive breakpoint hook
 │   ├── pages/
 │   │   └── index.astro
+│   ├── env.d.ts
 │   └── styles/
 │       ├── tokens.css      # CSS variables
 │       └── global.css
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI app factory
+│   │   ├── config.py               # Pydantic settings (env vars)
 │   │   ├── models.py               # Pydantic request/response models
 │   │   ├── compiler.py             # Compile orchestration
 │   │   ├── _compile_worker.py      # Sandboxed guppylang subprocess
-│   │   ├── simulator.py            # Simulate orchestration
-│   │   ├── _simulate_worker.py     # Sandboxed selene-sim subprocess
 │   │   ├── sandbox.py              # Subprocess runner + resource limits
 │   │   ├── examples_data.py        # Canonical example programs
 │   │   └── routes/
@@ -71,9 +74,18 @@ guppy-playground/
 │   │       ├── health.py           # GET /health
 │   │       └── examples.py         # GET /examples
 │   ├── tests/
-│   │   └── test_routes.py
+│   │   ├── test_routes.py
+│   │   └── test_api.py
+│   ├── test_api.sh         # Manual API smoke tests
 │   ├── requirements.txt
+│   ├── pytest.ini
+│   ├── .env.example
 │   └── Dockerfile
+├── .github/
+│   └── workflows/
+│       └── deploy-backend.yml  # Cloud Run deploy on push to main
+├── .env.example
+├── Makefile
 ├── docker-compose.yml
 ├── astro.config.mjs
 ├── package.json
