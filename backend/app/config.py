@@ -16,15 +16,18 @@ class Settings(BaseSettings):
     max_shots: int = 8192
     sandbox_memory_mb: int = 512
 
-    # CORS — comma-separated origins
+    # CORS — accepts a JSON array (["a","b"]) or comma-separated string (a,b)
     allowed_origins: str = (
-        "http://localhost:4321,"
-        "https://guppyfisher.dev"
+        '["http://localhost:4321","https://guppyfisher.dev"]'
     )
 
     @property
     def origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        import json
+        v = self.allowed_origins.strip()
+        if v.startswith("["):
+            return json.loads(v)
+        return [o.strip() for o in v.split(",") if o.strip()]
 
 
 @lru_cache
