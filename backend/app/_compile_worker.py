@@ -37,6 +37,8 @@ def main() -> None:
     simulator: str    = payload.get("simulator", "stabilizer")
     seed: int | None  = payload.get("seed")
 
+    # importlib requires a real file path, and guppylang reads the source file
+    # directly to build error spans — exec(source) would lose that information.
     tmpfile = tempfile.NamedTemporaryFile(
         suffix=".py", mode="w", delete=False, prefix="guppy_user_"
     )
@@ -66,7 +68,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
     try:
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     except SystemExit:
-        pass
+        pass  # user programs or guppylang internals may call sys.exit() at module level
     # GuppyError propagates out of exec_module — let it bubble to main()
 
     # Find main() entry point first, then any other @guppy fn
@@ -123,6 +125,8 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         if simulator == "stabilizer" and any(
             k in msg for k in ("not representable in stabiliser form", "RXY", "Clifford")
         ):
+            # Non-Clifford gates (e.g. T, Rz) can't run on the stabilizer backend;
+            # silently retry with statevector so the user still gets results.
             emulator_sv = guppy_fn.emulator(n_qubits=n_qubits).with_shots(shots)
             if seed is not None:
                 emulator_sv = emulator_sv.with_seed(seed)
@@ -130,6 +134,9 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         else:
             raise
 
+    # Flatten each shot's register entries into a single bit-string key.
+    # Registers can be scalar booleans or boolean arrays (qubit arrays);
+    # both are normalised to "0"/"1" characters and concatenated.
     counts: dict[str, int] = {}
     for shot in result.results:
         parts = []
@@ -282,6 +289,8 @@ def _render_plain_error(exc: Exception, tb_str: str) -> dict:
 # ── Qubit count heuristic ──────────────────────────────────────────────────
 
 def _infer_qubit_count(source: str) -> int:
+    # Heuristic: count bare qubit() calls and sum range(n) sizes for qubit arrays.
+    # Falls back to 2 so the emulator always gets a valid circuit width.
     individual = len(re.findall(r'\bqubit\(\)', source))
     array_total = sum(int(m) for m in re.findall(r'range\((\d+)\)', source))
     return max(individual + array_total, 2)
@@ -290,13 +299,14 @@ def _infer_qubit_count(source: str) -> int:
 # ── HUGR node extraction ───────────────────────────────────────────────────
 
 def _extract_nodes(hugr_str: str) -> list[dict]:
+    # hugr_str may contain a text preamble before the JSON object; skip to '{'.
     try:
         json_start = hugr_str.index('{')
         data = json.loads(hugr_str[json_start:])
     except (ValueError, json.JSONDecodeError):
         return []
     nodes: list[dict] = []
-    nid = [0]
+    nid = [0]  # list so the nested walk() closure can mutate it
     type_map = {
         "DFG": "DFG", "FuncDefn": "FuncDef", "FuncDecl": "FuncDef",
         "Call": "Call", "H": "Gate", "CX": "Gate", "CZ": "Gate",
@@ -322,8 +332,10 @@ def _extract_nodes(hugr_str: str) -> list[dict]:
 
 
 def _infer_nodes(source: str) -> list[dict]:
+    # Static fallback used when HUGR compilation fails — parses @guppy decorators
+    # and gate call sites with regex to produce a best-effort node tree.
     nodes: list[dict] = []
-    nid = [0]
+    nid = [0]  # list so the nested add() closure can mutate it
     def add(type_: str, name: str, depth: int) -> None:
         nodes.append({"id": str(nid[0]), "type": type_, "name": name,
                        "meta": "", "depth": depth, "parent": None})
