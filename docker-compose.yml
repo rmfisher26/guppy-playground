@@ -16,6 +16,7 @@ services:
       - "8000:8000"
     environment:
       PYTHONUNBUFFERED: "1"
+      ALLOWED_ORIGINS: "http://localhost:4321,https://guppyfisher.dev"
     volumes:
       # Hot-reload in dev — remove this volume mount for production builds
       - ./backend/app:/app/app:ro
@@ -46,7 +47,8 @@ services:
       - .:/app
       - /app/node_modules    # anonymous volume — prevents host node_modules overwrite
     environment:
-      PUBLIC_API_URL: "http://localhost:8000"
+      # Use http://localhost:8000 to point at the local backend instead
+      PUBLIC_API_URL: "https://guppy-playground-backend-x3i5frziia-uc.a.run.app"
     command: >
       sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 4321"
     mem_limit: 512m
