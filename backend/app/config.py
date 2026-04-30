@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     # CORS — comma-separated origins
     allowed_origins: str = (
         "http://localhost:4321,"
-        "http://localhost:3000,"
         "https://guppyfisher.dev"
     )
 
