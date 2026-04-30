@@ -15,8 +15,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      PYTHONUNBUFFERED: "1"
-      ALLOWED_ORIGINS: "http://localhost:4321,https://guppyfisher.dev"
+      - PYTHONUNBUFFERED=1
+      - ALLOWED_ORIGINS=["http://localhost:4321","https://guppyfisher.dev"]
     volumes:
       # Hot-reload in dev — remove this volume mount for production builds
       - ./backend/app:/app/app:ro
