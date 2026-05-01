@@ -129,3 +129,20 @@ resource "google_cloud_run_v2_service_iam_member" "frontend_public" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# ── Custom domain mapping ──────────────────────────────────────────────────────
+# Prerequisite: verify domain ownership at https://search.google.com/search-console
+# before this mapping will activate. Google provisions TLS automatically.
+
+resource "google_cloud_run_domain_mapping" "frontend" {
+  location = var.region
+  name     = "${var.frontend_subdomain}.${var.domain}"
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.frontend.name
+  }
+}

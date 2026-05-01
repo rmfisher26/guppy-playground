@@ -65,3 +65,26 @@ variable "max_code_length" {
   type        = string
   default     = "4000"
 }
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions for guppyfisher.dev"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for guppyfisher.dev (found in the domain's Overview page)"
+  type        = string
+}
+
+variable "domain" {
+  description = "Base domain name managed in Cloudflare"
+  type        = string
+  default     = "guppyfisher.dev"
+}
+
+variable "frontend_subdomain" {
+  description = "Subdomain for the frontend (e.g. 'pond' → pond.guppyfisher.dev)"
+  type        = string
+  default     = "pond"
+}
