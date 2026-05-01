@@ -88,3 +88,9 @@ variable "frontend_subdomain" {
   type        = string
   default     = "pond"
 }
+
+variable "backend_subdomain" {
+  description = "Subdomain for the backend API (e.g. 'api' → api.guppyfisher.dev)"
+  type        = string
+  default     = "api"
+}
