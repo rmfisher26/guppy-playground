@@ -84,7 +84,7 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public" {
 # Prerequisite: a frontend/Dockerfile that builds the Astro static site and
 # serves it via nginx. Once it exists, build and push before the first apply:
 #
-#   docker build -t REGISTRY/guppy-playground/frontend:latest ./
+#   docker build --build-arg PUBLIC_API_URL=BACKEND_URL -t REGISTRY/guppy-playground/frontend:latest ./frontend
 #   docker push REGISTRY/guppy-playground/frontend:latest
 
 resource "google_cloud_run_v2_service" "frontend" {
