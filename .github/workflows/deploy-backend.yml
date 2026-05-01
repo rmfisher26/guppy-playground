@@ -48,14 +48,7 @@ jobs:
           gcloud run deploy ${{ env.SERVICE }} \
             --image ${{ env.IMAGE }} \
             --region ${{ env.REGION }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 8000 \
-            --max-instances 1 \
-            --concurrency 10 \
-            --cpu 1 \
-            --memory 1024Mi \
-            --set-env-vars "ALLOWED_ORIGINS=[\"https://guppyfisher.dev\"],EXECUTION_TIMEOUT=60.0,MAX_CODE_LENGTH=4000,LOG_LEVEL=info"
+            --platform managed
 
       - name: Print service URL
         run: |
