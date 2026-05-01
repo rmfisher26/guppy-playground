@@ -1,5 +1,5 @@
-# Build context must be the project root:
-#   docker build -f frontend/Dockerfile --build-arg PUBLIC_API_URL=https://... .
+# Build context is the frontend/ directory:
+#   docker build --build-arg PUBLIC_API_URL=https://... ./frontend
 #
 # PUBLIC_API_URL is baked into the static bundle at build time (Astro output: static),
 # so it must be supplied here, not at container startup.
@@ -23,7 +23,7 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080
 
