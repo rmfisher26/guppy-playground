@@ -2,12 +2,10 @@ import React, { useRef, useState, useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import { encodeShareUrl } from '../../lib/api';
-import { useMobile } from '../../lib/useMobile';
 import type { SimulatorBackend } from '../../lib/types';
 
 export default function Toolbar() {
   const { shots, setShots, simulator, setSimulator, runState, showToast } = usePlaygroundStore();
-  const isMobile = useMobile();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
@@ -82,18 +80,15 @@ export default function Toolbar() {
 
       <div style={{ flex: 1 }} />
 
-      {/* Share — desktop only */}
-      {!isMobile && (
-        <button
-          style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
-          onClick={handleShare}
-          title="Copy share link"
-          onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
-          onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
-        >
-          <ShareIcon /> Share
-        </button>
-      )}
+      <button
+        style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
+        onClick={handleShare}
+        title="Copy share link"
+        onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
+        onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
+      >
+        <ShareIcon /> Share
+      </button>
 
     </div>
   );

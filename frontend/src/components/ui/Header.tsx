@@ -44,17 +44,13 @@ export default function Header() {
 
       <nav style={{ display:'flex', alignItems:'center', gap: isMobile ? 4 : 8 }}>
         <ThemeToggle current={theme} onChange={setTheme} />
-        {!isMobile && (
-          <>
-            <div style={{ width:1, height:16, background:'var(--border-bright)', flexShrink:0 }} />
-            <HeaderLink href="https://github.com/Quantinuum/guppylang">
-              <GithubIcon /> GitHub
-            </HeaderLink>
-            <HeaderLink href="https://docs.quantinuum.com/guppy/">
-              <DocsIcon /> Docs
-            </HeaderLink>
-          </>
-        )}
+        <div style={{ width:1, height:16, background:'var(--border-bright)', flexShrink:0 }} />
+        <HeaderLink href="https://github.com/Quantinuum/guppylang">
+          <GithubIcon /> GitHub
+        </HeaderLink>
+        <HeaderLink href="https://docs.quantinuum.com/guppy/">
+          <DocsIcon /> Docs
+        </HeaderLink>
       </nav>
     </header>
   );
