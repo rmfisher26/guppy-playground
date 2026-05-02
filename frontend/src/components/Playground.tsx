@@ -135,11 +135,20 @@ export default function Playground() {
             onMouseDown={onMobileDividerStart}
             onTouchStart={onMobileDividerStart}
             style={{
-              height: 5, flexShrink: 0, cursor: 'row-resize', touchAction: 'none',
-              background: mobileDividerActive ? 'var(--teal)' : 'var(--border)',
-              transition: mobileDividerActive ? 'none' : 'background 0.15s',
+              height: 24, flexShrink: 0, cursor: 'row-resize', touchAction: 'none',
+              background: mobileDividerActive ? 'var(--teal-subtle)' : 'var(--bg-surface)',
+              borderTop: `1px solid ${mobileDividerActive ? 'var(--teal)' : 'var(--border)'}`,
+              borderBottom: `1px solid ${mobileDividerActive ? 'var(--teal)' : 'var(--border)'}`,
+              transition: mobileDividerActive ? 'none' : 'background 0.15s, border-color 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
-          />
+          >
+            <div style={{
+              width: 32, height: 4, borderRadius: 2,
+              background: mobileDividerActive ? 'var(--teal)' : 'var(--border-bright)',
+              transition: mobileDividerActive ? 'none' : 'background 0.15s',
+            }} />
+          </div>
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <OutputPane isMobile />
           </div>
