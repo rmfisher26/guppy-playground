@@ -95,16 +95,6 @@ export default function Toolbar() {
         </button>
       )}
 
-      {/* Version badge — desktop only */}
-      {!isMobile && (
-        <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
-          background: 'var(--bg-base)', border: '1px solid var(--border)',
-          borderRadius: 100, padding: '2px 8px',
-        }}>
-          guppylang 0.21.11
-        </span>
-      )}
     </div>
   );
 }
