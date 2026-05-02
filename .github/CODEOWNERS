@@ -1,0 +1,10 @@
+# CODEOWNERS - controls who must approve pull requests
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo
+* @rmfisher26
+
+# Uncomment and customize to require specific owners per area:
+# /frontend/   @rmfisher26
+# /backend/    @rmfisher26
+# /infra/      @rmfisher26
