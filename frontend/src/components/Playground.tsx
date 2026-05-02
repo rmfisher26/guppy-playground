@@ -124,7 +124,7 @@ export default function Playground() {
   // ── Mobile layout ──────────────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <Header />
         <Toolbar />
         <div ref={mobileMainRef} style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -161,7 +161,7 @@ export default function Playground() {
   // ── Desktop layout ─────────────────────────────────────────────────────────
   const dividerHighlighted = dividerActive || dividerHovered;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden' }}>
       <Header />
       <Toolbar />
       <div ref={containerRef} style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
