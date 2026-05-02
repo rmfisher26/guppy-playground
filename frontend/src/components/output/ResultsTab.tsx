@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { usePlaygroundStore } from '../../lib/store';
+import { usePlaygroundStore, resolveIsDark } from '../../lib/store';
 
 export default function ResultsTab() {
-  const { runState } = usePlaygroundStore();
+  const { runState, theme } = usePlaygroundStore();
+  const isDark = resolveIsDark(theme);
+  const basisTickColor = isDark ? 'var(--text-primary)' : 'var(--text-secondary)';
   const [chartLayout, setChartLayout] = useState<'vertical' | 'horizontal'>('vertical');
 
   if (runState.status !== 'success' || !runState.response.results) {
@@ -42,7 +44,7 @@ export default function ResultsTab() {
       }}>
         <div style={{ color: 'var(--text-primary)', marginBottom: 2 }}>{d.basis}</div>
         <div style={{ color: 'var(--teal)' }}>{d.count.toLocaleString()} shots</div>
-        <div style={{ color: 'var(--text-muted)' }}>{d.pct}%</div>
+        <div style={{ color: 'var(--text-primary)' }}>{d.pct}%</div>
       </div>
     );
   };
@@ -80,7 +82,7 @@ export default function ResultsTab() {
               <XAxis type="number" hide domain={[0, total]} />
               <YAxis
                 type="category" dataKey="basis" width={48}
-                tick={{ fill: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--teal-subtle)' }} />
@@ -90,9 +92,10 @@ export default function ResultsTab() {
                   return (
                     <text x={x + width + 6} y={y + height / 2}
                       dominantBaseline="middle" textAnchor="start"
-                      fontFamily="var(--font-mono)" fontSize={10} fill="var(--text-muted)"
+                      fontFamily="var(--font-mono)" fontSize={10}
                     >
-                      {value.toLocaleString()} · {pct}%
+                      <tspan fill="var(--teal)">{value.toLocaleString()}</tspan>
+                      <tspan fill="var(--text-primary)"> · {pct}%</tspan>
                     </text>
                   );
                 }}
@@ -106,20 +109,21 @@ export default function ResultsTab() {
             <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: 24, bottom: 4 }}>
               <XAxis
                 type="category" dataKey="basis" width={48}
-                tick={{ fill: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
               />
               <YAxis type="number" hide domain={[0, total]} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--teal-subtle)' }} />
               <Bar dataKey="count" fill="var(--teal)" radius={[3, 3, 0, 0]} maxBarSize={40}
-                label={({ x, y, width, index }: any) => {
+                label={({ x, y, width, value, index }: any) => {
                   const pct = chartData[index]?.pct;
                   return (
                     <text x={x + width / 2} y={y - 5}
                       dominantBaseline="auto" textAnchor="middle"
-                      fontFamily="var(--font-mono)" fontSize={10} fill="var(--text-muted)"
+                      fontFamily="var(--font-mono)" fontSize={10}
                     >
-                      {pct}%
+                      <tspan fill="var(--teal)">{value.toLocaleString()}</tspan>
+                      <tspan fill="var(--text-primary)"> · {pct}%</tspan>
                     </text>
                   );
                 }}
