@@ -46,10 +46,10 @@ export default function Header() {
         <ThemeToggle current={theme} onChange={setTheme} />
         <div style={{ width:1, height:16, background:'var(--border-bright)', flexShrink:0 }} />
         <HeaderLink href="https://github.com/Quantinuum/guppylang">
-          <GithubIcon /> GitHub
+          <GithubIcon /> {!isMobile && 'GitHub'}
         </HeaderLink>
         <HeaderLink href="https://docs.quantinuum.com/guppy/">
-          <DocsIcon /> Docs
+          <DocsIcon /> {!isMobile && 'Docs'}
         </HeaderLink>
       </nav>
     </header>
