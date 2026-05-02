@@ -26,7 +26,8 @@ export default function EditorPane() {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
-      minWidth: 0, borderRight: '1px solid var(--border)',
+      minWidth: 0, minHeight: 0, overflow: 'hidden',
+      borderRight: '1px solid var(--border)',
     }}>
       {/* Pane header */}
       <div style={{
