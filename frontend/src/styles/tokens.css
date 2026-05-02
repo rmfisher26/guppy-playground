@@ -13,16 +13,16 @@
   /* Quantinuum Brand */
   --logo-fisher:    #1859a3;
   --navy:           #0a1628;
-  --teal:           #00b4d8;
-  --teal-dim:       #0090ae;
-  --teal-glow:      rgba(0, 180, 216, 0.12);
-  --teal-subtle:    rgba(0, 180, 216, 0.06);
+  --teal:           #30a08e;
+  --teal-dim:       #267a6d;
+  --teal-glow:      rgba(48, 160, 142, 0.12);
+  --teal-subtle:    rgba(48, 160, 142, 0.06);
 
   /* Text */
   --text-primary:   #e6edf3;
   --text-secondary: #8b98a8;
   --text-muted:     #4d5d70;
-  --text-teal:      #00b4d8;
+  --text-teal:      #30a08e;
 
   /* Semantic */
   --green:          #3fb950;

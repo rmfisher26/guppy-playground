@@ -39,16 +39,16 @@ const errorField = StateField.define<DecorationSet>({
 const guppyDarkTheme = EditorView.theme({
   '&': { height: '100%', fontSize: '13px', fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace", background: '#0d1117' },
   '.cm-scroller': { fontFamily: 'inherit', lineHeight: '20px', overflow: 'auto' },
-  '.cm-content': { padding: '16px 0', caretColor: '#00b4d8' },
+  '.cm-content': { padding: '16px 0', caretColor: '#30a08e' },
   '.cm-gutters': { background: '#0d1117', border: 'none', borderRight: '1px solid #2a3444', color: '#4d5d70', minWidth: '48px' },
   '.cm-lineNumbers .cm-gutterElement': { padding: '0 10px 0 4px', minWidth: '40px', textAlign: 'right' },
-  '.cm-activeLine': { background: 'rgba(0,180,216,0.04)' },
-  '.cm-activeLineGutter': { background: 'rgba(0,180,216,0.08)', color: '#8b98a8' },
-  '.cm-selectionBackground, ::selection': { background: 'rgba(0,180,216,0.15) !important' },
-  '.cm-cursor': { borderLeftColor: '#00b4d8' },
+  '.cm-activeLine': { background: 'rgba(48,160,142,0.04)' },
+  '.cm-activeLineGutter': { background: 'rgba(48,160,142,0.08)', color: '#8b98a8' },
+  '.cm-selectionBackground, ::selection': { background: 'rgba(48,160,142,0.15) !important' },
+  '.cm-cursor': { borderLeftColor: '#30a08e' },
   '.cm-error-line': { background: 'rgba(248,81,73,0.08)', borderLeft: '2px solid #f85149' },
   '.cm-focused': { outline: 'none' },
-  '&.cm-focused .cm-selectionBackground': { background: 'rgba(0,180,216,0.2)' },
+  '&.cm-focused .cm-selectionBackground': { background: 'rgba(48,160,142,0.2)' },
 });
 
 // ── Light theme ──────────────────────────────────────────────────────────

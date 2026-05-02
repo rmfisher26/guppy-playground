@@ -83,8 +83,8 @@ export default function ResultsTab() {
                 tick={{ fill: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,180,216,0.06)' }} />
-              <Bar dataKey="count" fill="#0a2f52" radius={[0, 3, 3, 0]} maxBarSize={22}
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--teal-subtle)' }} />
+              <Bar dataKey="count" fill="var(--teal)" radius={[0, 3, 3, 0]} maxBarSize={22}
                 label={({ x, y, width, height, value, index }: any) => {
                   const pct = chartData[index]?.pct;
                   return (
@@ -110,8 +110,8 @@ export default function ResultsTab() {
                 axisLine={false} tickLine={false}
               />
               <YAxis type="number" hide domain={[0, total]} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,180,216,0.06)' }} />
-              <Bar dataKey="count" fill="#0a2f52" radius={[3, 3, 0, 0]} maxBarSize={40}
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--teal-subtle)' }} />
+              <Bar dataKey="count" fill="var(--teal)" radius={[3, 3, 0, 0]} maxBarSize={40}
                 label={({ x, y, width, index }: any) => {
                   const pct = chartData[index]?.pct;
                   return (
