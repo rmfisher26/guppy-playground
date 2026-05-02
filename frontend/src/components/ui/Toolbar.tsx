@@ -2,10 +2,12 @@ import React, { useRef, useState, useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import { encodeShareUrl } from '../../lib/api';
+import { useMobile } from '../../lib/useMobile';
 import type { SimulatorBackend } from '../../lib/types';
 
 export default function Toolbar() {
   const { shots, setShots, simulator, setSimulator, runState, showToast } = usePlaygroundStore();
+  const isMobile = useMobile();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
@@ -87,7 +89,7 @@ export default function Toolbar() {
         onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
         onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
       >
-        <ShareIcon /> Share
+        <ShareIcon />{!isMobile && ' Share'}
       </button>
 
     </div>
