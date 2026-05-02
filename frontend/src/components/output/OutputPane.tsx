@@ -221,6 +221,9 @@ function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof get
           {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       )}
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', paddingLeft: 8 }}>
+        guppylang 0.21.11
+      </span>
     </div>
   );
 }
