@@ -34,8 +34,8 @@ export default function Header() {
       {!isMobile && (
         <>
           <div style={{ width:1, height:20, background:'var(--border-bright)', margin:'0 16px', flexShrink:0 }} />
-          <span style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.06em', textTransform:'uppercase' }}>
-            Quantinuum · Selene Emulator
+          <span style={{ fontSize:11, color:'var(--text-secondary)', fontFamily:'var(--font-ui)' }}>
+            Write and simulate quantum programs with Guppy
           </span>
         </>
       )}
