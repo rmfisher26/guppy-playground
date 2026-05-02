@@ -106,7 +106,7 @@ export default function ResultsTab() {
       ) : (
         <div style={{ height: Math.max(160, 120 + chartData.length * 8), marginBottom: 16 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: 24, bottom: 4 }}>
+            <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: 36, bottom: 4 }}>
               <XAxis
                 type="category" dataKey="basis" width={48}
                 tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
@@ -117,13 +117,14 @@ export default function ResultsTab() {
               <Bar dataKey="count" fill="var(--teal)" radius={[3, 3, 0, 0]} maxBarSize={40}
                 label={({ x, y, width, value, index }: any) => {
                   const pct = chartData[index]?.pct;
+                  const cx = x + width / 2;
                   return (
-                    <text x={x + width / 2} y={y - 5}
+                    <text x={cx} y={y - 18}
                       dominantBaseline="auto" textAnchor="middle"
                       fontFamily="var(--font-mono)" fontSize={10}
                     >
-                      <tspan fill="var(--teal)">{value.toLocaleString()}</tspan>
-                      <tspan fill="var(--text-primary)"> · {pct}%</tspan>
+                      <tspan x={cx} dy="0" fill="var(--text-primary)">{pct}%</tspan>
+                      <tspan x={cx} dy="13" fill="var(--teal)">{value.toLocaleString()}</tspan>
                     </text>
                   );
                 }}
