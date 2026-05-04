@@ -4,6 +4,8 @@ A browser-based IDE for writing and running [Guppy](https://github.com/Quantinuu
 
 Built with Astro + React (frontend) and FastAPI (backend).
 
+**[Try it live →](https://pond.guppyfisher.dev)**
+
 ---
 
 ## Quick start
@@ -11,6 +13,7 @@ Built with Astro + React (frontend) and FastAPI (backend).
 ### Frontend only (uses mock API fallback)
 
 ```bash
+cd frontend
 npm install
 npm run dev
 # → http://localhost:4321
@@ -35,31 +38,46 @@ uvicorn app.main:app --reload --port 8000
 
 ---
 
+## Make commands
+
+| Command               | Description                          |
+|-----------------------|--------------------------------------|
+| `make dev`            | Full stack via Docker Compose        |
+| `make frontend`       | Frontend dev server only             |
+| `make backend`        | Backend dev server only              |
+| `make build`          | Production frontend build            |
+| `make test-backend`   | Run all backend tests                |
+| `make install`        | Install frontend dependencies        |
+| `make clean`          | Remove build artifacts and caches    |
+
+---
+
 ## Project structure
 
 ```
 guppy-playground/
-├── src/
-│   ├── components/
-│   │   ├── Playground.tsx  # Root layout component
-│   │   ├── ui/             # Header, Toolbar, Toast
-│   │   ├── sidebar/        # Example list
-│   │   ├── editor/         # EditorPane, GuppyEditor (CodeMirror 6 + error decorations)
-│   │   ├── output/         # OutputPane, TerminalOutput, ResultsTab, HugrTab
-│   │   └── hooks/          # useRun — run lifecycle + Ctrl+Enter
-│   ├── lib/
-│   │   ├── api.ts          # Typed fetch client
-│   │   ├── store.ts        # Zustand global state
-│   │   ├── types.ts        # Shared TypeScript types
-│   │   ├── examples.ts     # Static fallback examples
-│   │   ├── defaultSource.ts # Default editor program
-│   │   └── useMobile.ts    # Responsive breakpoint hook
-│   ├── pages/
-│   │   └── index.astro
-│   ├── env.d.ts
-│   └── styles/
-│       ├── tokens.css      # CSS variables
-│       └── global.css
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── Playground.tsx  # Root layout component
+│       │   ├── ui/             # Header, Toolbar, Toast
+│       │   ├── sidebar/        # Example list
+│       │   ├── editor/         # EditorPane, GuppyEditor (CodeMirror 6 + error decorations)
+│       │   ├── output/         # OutputPane, TerminalOutput, ResultsTab, HugrTab
+│       │   └── hooks/          # useRun — run lifecycle + Ctrl+Enter
+│       ├── lib/
+│       │   ├── api.ts          # Typed fetch client
+│       │   ├── store.ts        # Zustand global state
+│       │   ├── types.ts        # Shared TypeScript types
+│       │   ├── examples.ts     # Static fallback examples
+│       │   ├── defaultSource.ts # Default editor program
+│       │   └── useMobile.ts    # Responsive breakpoint hook
+│       ├── pages/
+│       │   └── index.astro
+│       ├── env.d.ts
+│       └── styles/
+│           ├── tokens.css      # CSS variables
+│           └── global.css
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI app factory
@@ -83,13 +101,11 @@ guppy-playground/
 │   └── Dockerfile
 ├── .github/
 │   └── workflows/
-│       └── deploy-backend.yml  # Cloud Run deploy on push to main
+│       ├── deploy-backend.yml   # Cloud Run deploy on push to main
+│       └── deploy-frontend.yml
 ├── .env.example
 ├── Makefile
-├── docker-compose.yml
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+└── docker-compose.yml
 ```
 
 ---
@@ -115,6 +131,28 @@ guppy-playground/
 ```
 
 Response statuses: `ok` · `compile_error` · `timeout` · `rate_limited` · `internal_error`
+
+---
+
+## Environment variables
+
+### Backend (`backend/.env`)
+
+| Variable                   | Default | Description                              |
+|----------------------------|---------|------------------------------------------|
+| `COMPILE_TIMEOUT_SECONDS`  | 10      | Max seconds allowed for compilation      |
+| `SIMULATE_TIMEOUT_SECONDS` | 15      | Max seconds allowed for simulation       |
+| `MAX_SHOTS`                | 8192    | Maximum shots per request                |
+| `SANDBOX_MEMORY_MB`        | 512     | Memory limit for the sandbox subprocess  |
+| `ALLOWED_ORIGINS`          | localhost + guppyfisher.dev | Comma-separated or JSON array of allowed CORS origins |
+
+### Frontend (`frontend/.env`)
+
+| Variable         | Default                  | Description                    |
+|------------------|--------------------------|--------------------------------|
+| `PUBLIC_API_URL` | `http://localhost:8000`  | Backend API URL                |
+
+Copy `.env.example` files to `.env` in each directory to override defaults locally.
 
 ---
 
