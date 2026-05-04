@@ -221,9 +221,16 @@ function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof get
           {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       )}
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', paddingLeft: 8 }}>
+      <a
+        href="https://github.com/Quantinuum/guppylang"
+        target="_blank"
+        rel="noreferrer"
+        style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--teal)', borderLeft: '1px solid var(--border)', paddingLeft: 8, textDecoration: 'none', opacity: 0.8 }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.8'; }}
+      >
         guppylang 0.21.11
-      </span>
+      </a>
     </div>
   );
 }
