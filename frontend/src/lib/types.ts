@@ -29,6 +29,7 @@ export interface CompileWarning {
 export interface CompileSuccess {
   hugr_json: Record<string, unknown>;
   hugr_nodes: HugrNode[];
+  tket_mermaid?: string;
   node_count: number;
   warnings: CompileWarning[];
   compile_time_ms: number;
@@ -94,4 +95,4 @@ export type RunState =
   | { status: 'rate_limited'; retry_after_ms: number }
   | { status: 'internal_error'; message: string };
 
-export type OutputTab = 'output' | 'results' | 'hugr';
+export type OutputTab = 'output' | 'results' | 'hugr' | 'tket';

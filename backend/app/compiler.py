@@ -103,6 +103,7 @@ async def compile_and_simulate(
     compile_ok = CompileSuccess(
         hugr_json=data.get("hugr_json"),
         hugr_nodes=nodes,
+        tket_mermaid=data.get("tket_mermaid"),
         node_count=len(nodes),
         qubit_count=qubit_count,
         warnings=warnings,

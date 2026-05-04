@@ -54,6 +54,7 @@ class HugrNode(BaseModel):
 class CompileSuccess(BaseModel):
     hugr_json:       dict | None = None
     hugr_nodes:      list[HugrNode]
+    tket_mermaid:    str | None = None
     node_count:      int
     qubit_count:     int = 2
     warnings:        list[CompileWarning] = []

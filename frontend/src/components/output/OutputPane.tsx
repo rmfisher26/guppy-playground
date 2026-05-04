@@ -4,6 +4,7 @@ import { useRun } from '../hooks/useRun';
 import TerminalOutput from './TerminalOutput';
 import ResultsTab from './ResultsTab';
 import HugrTab from './HugrTab';
+import TketTab from './TketTab';
 import type { OutputTab, RunState } from '../../lib/types';
 
 const OUTPUT_PANEL_MIN = 80;
@@ -63,6 +64,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
       { id: 'output',  label: 'Output'  },
       { id: 'results', label: 'Results' },
       { id: 'hugr',    label: 'HUGR'    },
+      { id: 'tket',    label: 'TKET'    },
     ];
     return (
       <div style={{
@@ -89,6 +91,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
           {activeTab === 'output'  && <TerminalOutput />}
           {activeTab === 'results' && <ResultsTab />}
           {activeTab === 'hugr'    && <HugrTab key={runId} />}
+          {activeTab === 'tket'    && <TketTab key={runId} />}
         </div>
         <StatusBar statusInfo={statusInfo} runState={runState} />
       </div>
@@ -99,6 +102,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
   const topTabs: { id: OutputTab; label: string }[] = [
     { id: 'results', label: 'Results' },
     { id: 'hugr',    label: 'HUGR'    },
+    { id: 'tket',    label: 'TKET'    },
   ];
   // If activeTab is 'output' (e.g. switched from mobile), treat 'results' as selected
   const topActiveTab: OutputTab = activeTab === 'output' ? 'results' : activeTab;
@@ -132,6 +136,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {topActiveTab === 'results' && <ResultsTab />}
           {topActiveTab === 'hugr'    && <HugrTab key={runId} />}
+          {topActiveTab === 'tket'    && <TketTab key={runId} />}
         </div>
       </div>
 

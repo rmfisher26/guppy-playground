@@ -103,6 +103,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
     # Compile HUGR for display panel
     hugr_nodes: list[dict] = []
     hugr_json: dict | None = None
+    tket_mermaid: str | None = None
     try:
         pkg = guppy_fn.compile()
         hugr_str = pkg.to_str()
@@ -112,6 +113,12 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         except (ValueError, json.JSONDecodeError):
             pass
         hugr_nodes = _extract_nodes(hugr_str)
+        try:
+            from tket.circuit import Tk2Circuit, render_circuit_mermaid
+            tk2 = Tk2Circuit.from_str(hugr_str)
+            tket_mermaid = render_circuit_mermaid(tk2)
+        except Exception:
+            pass
     except Exception:
         hugr_nodes = _infer_nodes(source)
 
@@ -156,12 +163,13 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         counts[key] = counts.get(key, 0) + 1
 
     print(json.dumps({
-        "status":      "ok",
-        "counts":      counts,
-        "hugr_nodes":  hugr_nodes,
-        "hugr_json":   hugr_json,
-        "warnings":    [],
-        "qubit_count": n_qubits,
+        "status":        "ok",
+        "counts":        counts,
+        "hugr_nodes":    hugr_nodes,
+        "hugr_json":     hugr_json,
+        "tket_mermaid":  tket_mermaid,
+        "warnings":      [],
+        "qubit_count":   n_qubits,
     }))
 
 
