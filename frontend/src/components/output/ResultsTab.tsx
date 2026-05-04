@@ -19,6 +19,7 @@ export default function ResultsTab() {
   }
 
   const { counts, expectation_values, simulate_time_ms } = runState.response.results;
+  const qubit_count = runState.response.compile?.qubit_count;
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((s, [, v]) => s + v, 0);
 
@@ -156,6 +157,7 @@ export default function ResultsTab() {
           { label: 'Outcomes',     value: String(entries.length) },
           { label: 'Most likely',  value: `|${entries[0][0]}⟩ · ${(((entries[0][1] as number) / total) * 100).toFixed(1)}%` },
           { label: 'Sim time',     value: `${simulate_time_ms}ms` },
+          ...(qubit_count != null ? [{ label: 'Qubits', value: String(qubit_count) }] : []),
         ].map(({ label, value }) => (
           <div key={label} style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border)',

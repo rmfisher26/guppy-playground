@@ -297,10 +297,13 @@ def _render_plain_error(exc: Exception, tb_str: str) -> dict:
 # ── Qubit count heuristic ──────────────────────────────────────────────────
 
 def _infer_qubit_count(source: str) -> int:
-    # Heuristic: count bare qubit() calls and sum range(n) sizes for qubit arrays.
+    # Count array(qubit() for _ in range(n)) comprehensions specifically,
+    # then count remaining bare qubit() calls outside those patterns.
     # Falls back to 2 so the emulator always gets a valid circuit width.
-    individual = len(re.findall(r'\bqubit\(\)', source))
-    array_total = sum(int(m) for m in re.findall(r'range\((\d+)\)', source))
+    array_pat = r'array\s*\(\s*qubit\s*\(\s*\)\s+for\s+\w+\s+in\s+range\s*\(\s*(\d+)\s*\)\s*\)'
+    array_total = sum(int(m) for m in re.findall(array_pat, source))
+    stripped = re.sub(array_pat, '', source)
+    individual = len(re.findall(r'\bqubit\(\)', stripped))
     return max(individual + array_total, 2)
 
 

@@ -30,6 +30,7 @@ export interface CompileSuccess {
   hugr_json: Record<string, unknown>;
   hugr_nodes: HugrNode[];
   node_count: number;
+  qubit_count: number;
   warnings: CompileWarning[];
   compile_time_ms: number;
 }
