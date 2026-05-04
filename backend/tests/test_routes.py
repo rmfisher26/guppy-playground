@@ -101,5 +101,105 @@ def test_run_empty_source():
     })
     assert resp.status_code == 200
     data = resp.json()
-    # Empty source should return compile_error, not 500
-    assert data["status"] in ("compile_error", "internal_error")
+    # Empty source is valid Python — guppylang compiles it and returns ok with 0 shots,
+    # but never a 500
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert sum(data["results"]["counts"].values()) == 0
+
+
+def test_run_seed_is_reproducible():
+    payload = {"source": BELL_SOURCE, "shots": 128, "simulator": "stabilizer", "seed": 99}
+    r1 = client.post("/run", json=payload)
+    r2 = client.post("/run", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+    d1, d2 = r1.json(), r2.json()
+    assert d1["status"] == d2["status"]
+    if d1["status"] == "ok":
+        assert d1["results"]["counts"] == d2["results"]["counts"]
+
+
+def test_run_statevector_simulator():
+    resp = client.post("/run", json={
+        "source":    BELL_SOURCE,
+        "shots":     64,
+        "simulator": "statevector",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert sum(data["results"]["counts"].values()) == 64
+
+
+def test_run_invalid_simulator():
+    resp = client.post("/run", json={
+        "source":    BELL_SOURCE,
+        "shots":     64,
+        "simulator": "not_a_real_simulator",
+    })
+    assert resp.status_code == 422
+
+
+def test_run_response_has_request_id():
+    resp = client.post("/run", json={
+        "source":    "invalid @@@@",
+        "shots":     64,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    assert resp.json().get("request_id") is not None
+
+
+def test_run_uses_default_shots():
+    resp = client.post("/run", json={
+        "source":    BELL_SOURCE,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        assert sum(data["results"]["counts"].values()) == 1024
+
+
+# ── Examples (extended) ────────────────────────────────────────────────────
+
+EXAMPLE_FIELDS = {"id", "title", "description", "tags", "source", "qubit_count", "group"}
+
+def test_examples_all_fields_present():
+    resp = client.get("/examples")
+    assert resp.status_code == 200
+    for ex in resp.json()["examples"]:
+        missing = EXAMPLE_FIELDS - ex.keys()
+        assert not missing, f"Example {ex.get('id')} missing fields: {missing}"
+
+
+def test_examples_sources_are_non_empty():
+    resp = client.get("/examples")
+    assert resp.status_code == 200
+    for ex in resp.json()["examples"]:
+        assert ex["source"].strip(), f"Example {ex['id']} has empty source"
+
+
+# ── CORS ───────────────────────────────────────────────────────────────────
+
+def test_cors_header_on_run():
+    resp = client.post(
+        "/run",
+        json={"source": "x", "shots": 64, "simulator": "stabilizer"},
+        headers={"Origin": "http://localhost:4321"},
+    )
+    assert "access-control-allow-origin" in resp.headers
+
+
+def test_cors_preflight():
+    resp = client.options(
+        "/run",
+        headers={
+            "Origin":                        "http://localhost:4321",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert resp.status_code in (200, 204)

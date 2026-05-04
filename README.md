@@ -36,19 +36,32 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+### Backend tests
+
+```bash
+make test-backend
+```
+
+Creates a virtual environment under `backend/.venv` automatically on first run (requires [`uv`](https://github.com/astral-sh/uv)). To run a subset:
+
+```bash
+make test-backend-unit    # unit tests only (models, sandbox, compiler logic)
+make test-backend-routes  # route integration tests only
+```
+
 ---
 
 ## Make commands
 
-| Command               | Description                          |
-|-----------------------|--------------------------------------|
-| `make dev`            | Full stack via Docker Compose        |
-| `make frontend`       | Frontend dev server only             |
-| `make backend`        | Backend dev server only              |
-| `make build`          | Production frontend build            |
-| `make test-backend`   | Run all backend tests                |
-| `make install`        | Install frontend dependencies        |
-| `make clean`          | Remove build artifacts and caches    |
+| Command                | Description                                       |
+|------------------------|---------------------------------------------------|
+| `make dev`             | Full stack via Docker Compose                     |
+| `make frontend`        | Frontend dev server only                          |
+| `make backend`         | Backend dev server only                           |
+| `make build`           | Production frontend build                         |
+| `make test-backend`    | Create venv (if needed) and run all backend tests |
+| `make install`         | Install frontend dependencies                     |
+| `make clean`           | Remove build artifacts and caches                 |
 
 ---
 
