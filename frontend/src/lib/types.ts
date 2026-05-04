@@ -86,6 +86,7 @@ export interface ExamplesResponse {
 
 export type RunState =
   | { status: 'idle' }
+  | { status: 'preparing' }
   | { status: 'compiling' }
   | { status: 'simulating' }
   | { status: 'success'; response: RunResponse; elapsed_ms: number }
