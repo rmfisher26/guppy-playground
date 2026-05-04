@@ -1,21 +1,72 @@
-import React, { useState } from 'react';
-import { usePlaygroundStore } from '../../lib/store';
-import type { HugrNode } from '../../lib/types';
+import React, { useEffect, useRef } from 'react';
+import { EditorState } from '@codemirror/state';
+import { EditorView, lineNumbers } from '@codemirror/view';
+import { json } from '@codemirror/lang-json';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { usePlaygroundStore, resolveIsDark } from '../../lib/store';
 
-const TYPE_STYLES: Record<string, { bg: string; color: string }> = {
-  DFG:     { bg: 'rgba(0,180,216,0.15)',  color: 'var(--teal)' },
-  FuncDef: { bg: 'rgba(63,185,80,0.15)',  color: 'var(--green)' },
-  Call:    { bg: 'rgba(210,153,34,0.15)', color: 'var(--yellow)' },
-  Gate:    { bg: 'rgba(232,113,42,0.15)', color: 'var(--orange)' },
-  Measure: { bg: 'rgba(248,81,73,0.15)',  color: 'var(--red)' },
-  Const:   { bg: 'rgba(139,152,168,0.15)', color: 'var(--text-secondary)' },
-  Input:   { bg: 'rgba(139,152,168,0.1)',  color: 'var(--text-muted)' },
-  Output:  { bg: 'rgba(139,152,168,0.1)',  color: 'var(--text-muted)' },
-};
+const readOnlyTheme = EditorView.theme({
+  '&': { height: '100%', fontSize: '12px', fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" },
+  '.cm-scroller': { overflow: 'auto' },
+  '.cm-gutters': { border: 'none', borderRight: '1px solid var(--border)' },
+  '.cm-focused': { outline: 'none' },
+});
+
+const lightEditorTheme = EditorView.theme({
+  '&': { background: '#f5f5f3', color: '#0d0f14' },
+  '.cm-content': { caretColor: '#0d0f14' },
+  '.cm-gutters': { background: '#eeedeb', color: '#989898' },
+  '.cm-activeLineGutter': { background: '#e4e3e0' },
+  '.cm-activeLine': { background: 'rgba(0,0,0,0.025)' },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+    background: 'rgba(48, 160, 142, 0.15)',
+  },
+  '::selection': { background: 'rgba(48, 160, 142, 0.15)' },
+});
+
+const lightHighlight = syntaxHighlighting(HighlightStyle.define([
+  { tag: t.propertyName, color: '#0a6e5f' },   // JSON keys — dark teal
+  { tag: t.string,       color: '#6f3800' },   // string values — amber
+  { tag: t.number,       color: '#0550ae' },   // numbers — blue
+  { tag: t.bool,         color: '#cf222e' },   // true/false — red
+  { tag: t.null,         color: '#8250df' },   // null — purple
+  { tag: t.punctuation,  color: '#57606a' },   // : , { } [ ]
+  { tag: t.bracket,      color: '#24292f' },
+]));
+
+function JsonViewer({ content }: { content: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const { theme } = usePlaygroundStore();
+  const isDark = resolveIsDark(theme);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    viewRef.current?.destroy();
+
+    const state = EditorState.create({
+      doc: content,
+      extensions: [
+        lineNumbers(),
+        json(),
+        isDark ? oneDark : [lightEditorTheme, lightHighlight],
+        readOnlyTheme,
+        EditorState.readOnly.of(true),
+        EditorView.lineWrapping,
+      ],
+    });
+
+    viewRef.current = new EditorView({ state, parent: containerRef.current });
+    return () => { viewRef.current?.destroy(); viewRef.current = null; };
+  }, [content, isDark]);
+
+  return <div ref={containerRef} style={{ height: '100%' }} />;
+}
 
 export default function HugrTab() {
   const { runState } = usePlaygroundStore();
-  const [jsonOpen, setJsonOpen] = useState(false);
 
   if (runState.status !== 'success' || !runState.response.compile) {
     return (
@@ -33,124 +84,33 @@ export default function HugrTab() {
     );
   }
 
-  const { hugr_nodes, node_count } = runState.response.compile;
+  const { hugr_json, node_count } = runState.response.compile;
 
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+  if (!hugr_json) {
+    return (
       <div style={{
-        display: 'flex', alignItems: 'center', marginBottom: 12,
+        flex: 1, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 10, color: 'var(--text-muted)', padding: 24, textAlign: 'center',
       }}>
-        <span style={{
-          fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
-          textTransform: 'uppercase', color: 'var(--text-muted)', flex: 1,
-        }}>
-          HUGR IR · {node_count} nodes
-        </span>
-        <JsonToggleButton active={jsonOpen} onClick={() => setJsonOpen(o => !o)} />
+        <div style={{ fontSize: 32, opacity: 0.3 }}>⬡</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>HUGR JSON unavailable</div>
       </div>
-
-      {jsonOpen && (
-        <pre style={{
-          margin: '0 0 12px', padding: 12,
-          background: 'var(--bg-base)', borderRadius: 'var(--radius)',
-          border: '1px solid var(--border)',
-          color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)',
-          fontSize: 11, lineHeight: 1.6,
-          overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-        }}>
-          {runState.status === 'success' && runState.response.compile?.hugr_json
-            ? JSON.stringify(runState.response.compile.hugr_json, null, 2)
-            : 'No HUGR JSON available'}
-        </pre>
-      )}
-
-      {!jsonOpen && (
-        <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {hugr_nodes.map((node) => (
-              <HugrNodeRow key={node.id} node={node} />
-            ))}
-          </div>
-
-          {/* Legend */}
-          <div style={{
-            marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--border)',
-            display: 'flex', flexWrap: 'wrap', gap: 8,
-          }}>
-            {Object.entries(TYPE_STYLES).slice(0, 5).map(([type, style]) => (
-              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
-                  padding: '1px 5px', borderRadius: 3,
-                  background: style.bg, color: style.color,
-                }}>
-                  {type}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function HugrNodeRow({ node }: { node: HugrNode }) {
-  const [hovered, setHovered] = useState(false);
-  const style = TYPE_STYLES[node.type] ?? TYPE_STYLES.Const;
+    );
+  }
 
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: hovered ? 'var(--bg-raised)' : 'var(--bg-surface)',
-        border: `1px solid ${hovered ? 'var(--border-bright)' : 'var(--border)'}`,
-        borderRadius: 'var(--radius)',
-        padding: '7px 10px',
-        display: 'flex', alignItems: 'center', gap: 10,
-        marginLeft: node.depth * 18,
-        transition: 'border-color 0.15s, background 0.15s',
-        cursor: 'default',
-      }}
-    >
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
-        letterSpacing: '0.04em', padding: '2px 6px', borderRadius: 3,
-        flexShrink: 0, background: style.bg, color: style.color,
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{
+        padding: '10px 16px 8px', flexShrink: 0,
+        fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: 'var(--text-muted)',
       }}>
-        {node.type}
-      </span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {node.name}
-      </span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-        {node.meta}
-      </span>
+        HUGR IR · {node_count} nodes
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden', margin: '0 16px 16px' }}>
+        <JsonViewer content={JSON.stringify(hugr_json, null, 2)} />
+      </div>
     </div>
-  );
-}
-
-function JsonToggleButton({ active, onClick }: { active: boolean; onClick: () => void }) {
-  const [hovered, setHovered] = React.useState(false);
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={active ? 'Hide JSON' : 'Show run state JSON'}
-      style={{
-        height: 22, padding: '0 7px',
-        background: active ? 'var(--teal-subtle)' : hovered ? 'var(--bg-raised)' : 'transparent',
-        border: `1px solid ${active ? 'var(--teal-dim)' : hovered ? 'var(--border-bright)' : 'var(--border)'}`,
-        borderRadius: 'var(--radius-sm)',
-        color: active ? 'var(--text-teal)' : 'var(--text-muted)',
-        fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
-        cursor: 'pointer', letterSpacing: '0.04em',
-        transition: 'all 0.15s', flexShrink: 0,
-      }}
-    >
-      {'{ }'}
-    </button>
   );
 }
