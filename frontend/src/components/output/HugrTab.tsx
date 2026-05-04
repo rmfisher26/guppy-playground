@@ -58,33 +58,39 @@ export default function HugrTab() {
           fontSize: 11, lineHeight: 1.6,
           overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
         }}>
-          {JSON.stringify(runState, null, 2)}
+          {runState.status === 'success' && runState.response.compile?.hugr_json
+            ? JSON.stringify(runState.response.compile.hugr_json, null, 2)
+            : 'No HUGR JSON available'}
         </pre>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {hugr_nodes.map((node) => (
-          <HugrNodeRow key={node.id} node={node} />
-        ))}
-      </div>
-
-      {/* Legend */}
-      <div style={{
-        marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--border)',
-        display: 'flex', flexWrap: 'wrap', gap: 8,
-      }}>
-        {Object.entries(TYPE_STYLES).slice(0, 5).map(([type, style]) => (
-          <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
-              padding: '1px 5px', borderRadius: 3,
-              background: style.bg, color: style.color,
-            }}>
-              {type}
-            </span>
+      {!jsonOpen && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {hugr_nodes.map((node) => (
+              <HugrNodeRow key={node.id} node={node} />
+            ))}
           </div>
-        ))}
-      </div>
+
+          {/* Legend */}
+          <div style={{
+            marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--border)',
+            display: 'flex', flexWrap: 'wrap', gap: 8,
+          }}>
+            {Object.entries(TYPE_STYLES).slice(0, 5).map(([type, style]) => (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
+                  padding: '1px 5px', borderRadius: 3,
+                  background: style.bg, color: style.color,
+                }}>
+                  {type}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
