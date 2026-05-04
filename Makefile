@@ -1,7 +1,18 @@
 # ── Guppy Playground Makefile ──────────────────────────────────────────────
-.PHONY: dev build backend frontend test test-backend install clean \
+.PHONY: dev build backend frontend test test-backend test-backend-unit \
+        test-backend-routes backend-install install clean \
         tf-apply tf-teardown tf-rebuild tf-wif-restore \
         push-backend push-frontend push-images
+
+VENV    = $(CURDIR)/backend/.venv
+PYTHON  = $(VENV)/bin/python
+PYTEST  = $(VENV)/bin/pytest
+UVICORN = $(VENV)/bin/uvicorn
+
+# Create the backend venv + install deps if the venv doesn't exist yet
+$(PYTHON):
+	uv venv $(VENV)
+	uv pip install -r backend/requirements.txt --python $(PYTHON)
 
 # ── Infrastructure ─────────────────────────────────────────────────────────
 GCP_PROJECT  = guppyfisher
@@ -77,21 +88,22 @@ build:
 	npm run build
 
 # ── Backend ────────────────────────────────────────────────────────────────
-backend:
-	cd backend && uvicorn app.main:app --reload --port 8000
+backend: $(PYTHON)
+	cd backend && $(UVICORN) app.main:app --reload --port 8000
 
 backend-install:
-	cd backend && pip install -r requirements.txt
+	uv venv $(VENV)
+	uv pip install -r backend/requirements.txt --python $(PYTHON)
 
 # ── Tests ──────────────────────────────────────────────────────────────────
-test-backend:
-	cd backend && pytest tests/ -v
+test-backend: $(PYTHON)
+	cd backend && $(PYTEST) tests/ -v
 
-test-backend-unit:
-	cd backend && pytest tests/test_api.py -v
+test-backend-unit: $(PYTHON)
+	cd backend && $(PYTEST) tests/test_api.py -v
 
-test-backend-routes:
-	cd backend && pytest tests/test_routes.py -v
+test-backend-routes: $(PYTHON)
+	cd backend && $(PYTEST) tests/test_routes.py -v
 
 # ── Health check ───────────────────────────────────────────────────────────
 health:
