@@ -48,6 +48,9 @@ export default function Header() {
         <HeaderLink href="https://github.com/rmfisher26/guppy-playground">
           <GithubIcon /> {!isMobile && 'GitHub'}
         </HeaderLink>
+        <HeaderLink href="https://github.com/Quantinuum/guppylang">
+          <CodeIcon /> {!isMobile && 'Guppylang'}
+        </HeaderLink>
         <HeaderLink href="https://docs.quantinuum.com/guppy/">
           <DocsIcon /> {!isMobile && 'Docs'}
         </HeaderLink>
@@ -150,6 +153,10 @@ function MonitorIcon() {
       <line x1="12" y1="17" x2="12" y2="21"/>
     </svg>
   );
+}
+
+function CodeIcon() {
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
 }
 
 function GithubIcon() {
