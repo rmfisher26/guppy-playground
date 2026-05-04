@@ -293,14 +293,6 @@ function ExampleItem({
       }}>
         {example.title}
       </span>
-      <span style={{
-        fontSize: 9, fontFamily: 'var(--font-mono)',
-        color: 'var(--text-muted)', background: 'var(--bg-base)',
-        border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px',
-        flexShrink: 0,
-      }}>
-        {example.qubit_count}q
-      </span>
     </div>
   );
 }
