@@ -137,51 +137,6 @@ def main() -> None:
 main.check()`,
   },
   {
-    id: 'rus',
-    title: 'Repeat-Until-Success',
-    description: 'Probabilistic gate synthesis using mid-circuit measurement and feedforward.',
-    tags: ['feedforward', 'loops', 'advanced'],
-    group: 'Algorithms',
-    qubit_count: 3,
-    default_shots: 256,
-    source: `from guppylang import guppy
-from guppylang.std.builtins import result
-from guppylang.std.quantum import qubit, h, s, z, toffoli, measure
-from guppylang.std.quantum.functional import h as hf
-
-@guppy
-def repeat_until_success(q: qubit, attempts: int) -> bool:
-    """Repeat-until-success circuit for Rz(acos(3/5)).
-
-    From Nielsen & Chuang, Fig. 4.17.
-    Demonstrates measurement-dependent control flow —
-    essential for fault-tolerant quantum programs.
-    Succeeds with probability 5/8 per attempt.
-    """
-    for i in range(attempts):
-        a = hf(qubit())
-        b = hf(qubit())
-        toffoli(a, b, q)
-        s(q)
-        toffoli(a, b, q)
-        if not (measure(a) | measure(b)):
-            result("attempts", i + 1)
-            return True
-        z(q)
-    result("attempts", attempts)
-    return False
-
-@guppy
-def main() -> None:
-    """Run RUS — automatically uses Statevector simulator (non-Clifford gates)."""
-    q = qubit()
-    succeeded = repeat_until_success(q, 10)
-    result("success", succeeded)
-    result("final", measure(q))
-
-main.check()`,
-  },
-  {
     id: 'qec',
     title: 'Bit Flip Code',
     description: 'Three-qubit repetition code: encode, measure syndromes, and correct a single bit-flip error.',
