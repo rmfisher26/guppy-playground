@@ -19,7 +19,7 @@ import asyncio
 import sys
 from dataclasses import dataclass
 
-TIMEOUT_SECONDS = 30  # compile + simulate together
+TIMEOUT_SECONDS = 60  # compile + simulate together
 
 
 @dataclass

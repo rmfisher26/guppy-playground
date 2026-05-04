@@ -204,6 +204,20 @@ function TabButton({
 }
 
 function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof getStatusInfo>; runState: RunState }) {
+  const [elapsedS, setElapsedS] = React.useState(0);
+  const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
+
+  React.useEffect(() => {
+    if (!isRunning) { setElapsedS(0); return; }
+    setElapsedS(0);
+    const interval = setInterval(() => setElapsedS(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isRunning, runState.status]);
+
+  const displayText = isRunning && elapsedS >= 5
+    ? `${statusInfo.text.replace('…', '')} · ${elapsedS}s (first run may be slow)`
+    : statusInfo.text;
+
   return (
     <div style={{
       height: 28, background: 'var(--bg-surface)',
@@ -213,7 +227,7 @@ function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof get
     }}>
       <StatusDot color={statusInfo.dotColor} pulse={statusInfo.pulse} />
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-        {statusInfo.text}
+        {displayText}
       </span>
       <div style={{ flex: 1 }} />
       {runState.status === 'success' && (
@@ -248,6 +262,7 @@ function StatusDot({ color, pulse }: { color: string; pulse?: boolean }) {
 function getStatusInfo(state: RunState): { text: string; dotColor: string; pulse?: boolean } {
   switch (state.status) {
     case 'idle':           return { text: 'Ready',         dotColor: 'var(--text-muted)' };
+    case 'preparing':      return { text: 'Preparing…',    dotColor: 'var(--text-muted)', pulse: true };
     case 'compiling':      return { text: 'Compiling…',    dotColor: 'var(--teal)',   pulse: true };
     case 'simulating':     return { text: 'Simulating…',   dotColor: 'var(--teal)',   pulse: true };
     case 'success':        return { text: `Done · ${(state.elapsed_ms / 1000).toFixed(2)}s`, dotColor: 'var(--green)' };

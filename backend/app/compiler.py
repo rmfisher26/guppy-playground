@@ -26,7 +26,7 @@ from .models import (
 from .sandbox import run_subprocess
 
 WORKER = Path(__file__).parent / "_compile_worker.py"
-TIMEOUT = 30  # compile + simulate together; give generous budget
+TIMEOUT = 60  # compile + simulate together; give generous budget
 
 
 async def compile_and_simulate(

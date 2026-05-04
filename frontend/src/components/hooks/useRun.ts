@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
-import { run as apiRun } from '../../lib/api';
+import { run as apiRun, fetchHealth } from '../../lib/api';
+
+let backendReady = false;
 
 // Derive the display filename from the active slot and example list.
 // Matches what the user sees in the editor header.
@@ -31,11 +33,17 @@ export function useRun() {
     const { source, shots, simulator, seed, activeSlot, examples, setRunState, setActiveTab } =
       usePlaygroundStore.getState();
 
-    const isRunning = store.runState.status === 'compiling' || store.runState.status === 'simulating';
+    const isRunning = ['compiling', 'simulating', 'preparing'].includes(store.runState.status);
     if (isRunning) return;
 
     const filename = deriveFilename(activeSlot, examples);
     const start = performance.now();
+
+    if (!backendReady) {
+      setRunState({ status: 'preparing' });
+      try { await fetchHealth(); } catch { /* proceed regardless */ }
+      backendReady = true;
+    }
 
     setRunState({ status: 'compiling' });
     setActiveTab('output');
