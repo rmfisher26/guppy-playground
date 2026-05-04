@@ -10,11 +10,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Execution limits
-    compile_timeout_seconds: float = 10.0
-    simulate_timeout_seconds: float = 15.0
-    max_shots: int = 8192
-    sandbox_memory_mb: int = 512
 
     # CORS — accepts a JSON array (["a","b"]) or comma-separated string (a,b)
     allowed_origins: str = (
