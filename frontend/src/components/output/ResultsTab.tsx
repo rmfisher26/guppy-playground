@@ -153,8 +153,8 @@ export default function ResultsTab() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {[
           { label: 'Total shots',  value: total.toLocaleString() },
-          { label: 'Entropy',      value: `${entropy} bits` },
           { label: 'Outcomes',     value: String(entries.length) },
+          { label: 'Most likely',  value: `|${entries[0][0]}⟩ · ${(((entries[0][1] as number) / total) * 100).toFixed(1)}%` },
           { label: 'Sim time',     value: `${simulate_time_ms}ms` },
         ].map(({ label, value }) => (
           <div key={label} style={{

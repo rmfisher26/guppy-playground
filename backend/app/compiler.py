@@ -101,6 +101,7 @@ async def compile_and_simulate(
     qubit_count = data.get("qubit_count", 2)
 
     compile_ok = CompileSuccess(
+        hugr_json=data.get("hugr_json"),
         hugr_nodes=nodes,
         node_count=len(nodes),
         qubit_count=qubit_count,

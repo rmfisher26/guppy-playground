@@ -102,9 +102,16 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
 
     # Compile HUGR for display panel
     hugr_nodes: list[dict] = []
+    hugr_json: dict | None = None
     try:
         pkg = guppy_fn.compile()
-        hugr_nodes = _extract_nodes(pkg.to_str())
+        hugr_str = pkg.to_str()
+        try:
+            json_start = hugr_str.index('{')
+            hugr_json = json.loads(hugr_str[json_start:])
+        except (ValueError, json.JSONDecodeError):
+            pass
+        hugr_nodes = _extract_nodes(hugr_str)
     except Exception:
         hugr_nodes = _infer_nodes(source)
 
@@ -152,6 +159,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         "status":      "ok",
         "counts":      counts,
         "hugr_nodes":  hugr_nodes,
+        "hugr_json":   hugr_json,
         "warnings":    [],
         "qubit_count": n_qubits,
     }))
