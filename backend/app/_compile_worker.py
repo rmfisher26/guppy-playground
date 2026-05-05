@@ -143,7 +143,8 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         else:
             raise
 
-    counts: dict[str, int] = _flatten_counts(result)
+    counts          = _flatten_counts(result)
+    register_names  = _extract_register_names(result)
 
     # Noisy simulation — only supported on stabilizer backend
     noisy_counts: dict[str, int] | None = None
@@ -166,13 +167,14 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
             pass  # if noisy sim fails, return ideal counts only
 
     print(json.dumps({
-        "status":       "ok",
-        "counts":       counts,
-        "noisy_counts": noisy_counts,
-        "hugr_nodes":   hugr_nodes,
-        "hugr_json":    hugr_json,
-        "warnings":     [],
-        "qubit_count":  n_qubits,
+        "status":          "ok",
+        "counts":          counts,
+        "noisy_counts":    noisy_counts,
+        "register_names":  register_names,
+        "hugr_nodes":      hugr_nodes,
+        "hugr_json":       hugr_json,
+        "warnings":        [],
+        "qubit_count":     n_qubits,
     }))
 
 
@@ -191,6 +193,32 @@ def _flatten_counts(result) -> dict[str, int]:
         key = "".join(parts)
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def _extract_register_names(result) -> list[str] | None:
+    """Return per-bit register names from the first shot, or None for anonymous returns.
+
+    Uses QsysShot.to_register_bits() which handles scalar booleans, boolean arrays,
+    and the reg[n] indexed tag convention.  Multi-bit registers are expanded:
+      {"q": "011"} → ["q[0]", "q[1]", "q[2]"]
+    Purely numeric tag names (anonymous tuple returns) are suppressed so callers
+    receive None rather than uninformative labels like ["0", "1"].
+    """
+    if not result.results:
+        return None
+    reg_bits = result.results[0].to_register_bits()
+    if not reg_bits:
+        return None
+    names: list[str] = []
+    for reg, bits in reg_bits.items():
+        if len(bits) == 1:
+            names.append(reg)
+        else:
+            names.extend(f"{reg}[{i}]" for i in range(len(bits)))
+    # Positional / anonymous returns use digit-only tag names — suppress them
+    if all(re.fullmatch(r"\d+", n.split("[")[0]) for n in names):
+        return None
+    return names or None
 
 
 # ── Error rendering ────────────────────────────────────────────────────────

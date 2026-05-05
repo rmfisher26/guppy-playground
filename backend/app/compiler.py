@@ -118,6 +118,7 @@ async def compile_and_simulate(
     sim_ok = SimulationResults(
         counts=data.get("counts", {}),
         noisy_counts=data.get("noisy_counts"),
+        register_names=data.get("register_names"),
         simulate_time_ms=elapsed_ms,
     )
 

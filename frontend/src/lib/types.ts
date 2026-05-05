@@ -50,6 +50,7 @@ export interface CompileError {
 export interface SimulationResults {
   counts: Record<string, number>;
   noisy_counts?: Record<string, number>;
+  register_names?: string[];
   expectation_values?: Record<string, number>;
   statevector?: Array<{ amplitude: [number, number]; basis: string }>;
   simulate_time_ms: number;

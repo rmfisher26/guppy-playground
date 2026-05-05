@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer,
@@ -24,7 +24,27 @@ export default function ResultsTab() {
     );
   }
 
-  const { counts, noisy_counts, expectation_values, simulate_time_ms } = runState.response.results;
+  const { counts, noisy_counts, register_names, expectation_values, simulate_time_ms } = runState.response.results;
+  const hasRegNames = register_names != null && register_names.length > 0;
+
+  function expandBits(bits: string): string | null {
+    if (!hasRegNames || register_names!.length !== bits.length) return null;
+    const arrayPat = /^(.+)\[(\d+)\]$/;
+    const groups = new Map<string, string[]>();
+    let allArray = true;
+    for (let i = 0; i < register_names!.length; i++) {
+      const m = register_names![i].match(arrayPat);
+      if (!m) { allArray = false; break; }
+      const base = m[1];
+      if (!groups.has(base)) groups.set(base, []);
+      groups.get(base)!.push(bits[i]);
+    }
+    if (allArray && groups.size > 0) {
+      return Array.from(groups.entries()).map(([base, bs]) => `${base}=${bs.join('')}`).join(', ');
+    }
+    return register_names!.map((name: string, i: number) => `${name}=${bits[i]}`).join(', ');
+  }
+
   const qubit_count = runState.response.compile?.qubit_count;
   const hasNoise = noisy_counts != null && Object.keys(noisy_counts).length > 0;
 
@@ -74,6 +94,17 @@ export default function ResultsTab() {
     );
   };
 
+  const axisTickFormatter = (value: string) => {
+    const raw = value.replace(/[|⟩]/g, '');
+    return expandBits(raw) ?? value;
+  };
+
+  const yAxisWidth = (() => {
+    if (!hasRegNames) return 48;
+    const maxLen = Math.max(...allBases.map(b => (expandBits(b) ?? `|${b}⟩`).length));
+    return Math.min(Math.max(maxLen * 6.6, 60), 200);
+  })();
+
   const barRadius: [number, number, number, number] =
     chartLayout === 'vertical' ? [0, 3, 3, 0] : [3, 3, 0, 0];
 
@@ -105,12 +136,13 @@ export default function ResultsTab() {
 
       {/* Chart */}
       {chartLayout === 'vertical' ? (
-        <div style={{ height: Math.max(120, chartData.length * (hasNoise ? 52 : 36)), marginBottom: 16 }}>
+        <div style={{ height: Math.max(180, chartData.length * (hasNoise ? 60 : 48)), marginBottom: 16 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: hasNoise ? 8 : 48, top: 4, bottom: 4 }} barCategoryGap="25%">
+            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: hasNoise ? 8 : 80, top: 4, bottom: 4 }} barCategoryGap="30%">
               <XAxis type="number" hide domain={[0, Math.max(totalIdeal, totalNoisy || 0)]} />
               <YAxis
-                type="category" dataKey="basis" width={48}
+                type="category" dataKey="basis" width={yAxisWidth}
+                tickFormatter={axisTickFormatter}
                 tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
               />
@@ -151,6 +183,7 @@ export default function ResultsTab() {
             <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: hasNoise ? 8 : 36, bottom: 4 }} barCategoryGap="25%">
               <XAxis
                 type="category" dataKey="basis"
+                tickFormatter={axisTickFormatter}
                 tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
               />
@@ -211,9 +244,13 @@ export default function ResultsTab() {
               const deltaColor = Math.abs(delta) < 0.5
                 ? 'var(--text-muted)'
                 : delta > 0 ? NOISY_COLOR : 'var(--teal)';
+              const rawBits = basis.replace(/[|⟩]/g, '');
+              const expanded = expandBits(rawBits);
               return (
                 <React.Fragment key={basis}>
-                  <div style={{ color: 'var(--text-primary)', padding: '3px 6px' }}>{basis}</div>
+                  <div style={{ color: 'var(--text-primary)', padding: '3px 6px' }}>
+                    {expanded ?? basis}
+                  </div>
                   <div style={{ color: IDEAL_COLOR, padding: '3px 6px' }}>{idealPct}%</div>
                   <div style={{ color: NOISY_COLOR, padding: '3px 6px' }}>{noisyPct ?? '0.0'}%</div>
                   <div style={{ color: deltaColor, padding: '3px 6px' }}>{deltaStr}</div>

@@ -71,6 +71,7 @@ class CompileSuccess(BaseModel):
 class SimulationResults(BaseModel):
     counts:           dict[str, int]
     noisy_counts:     dict[str, int] | None = None
+    register_names:   list[str] | None = None
     simulate_time_ms: int
 
 

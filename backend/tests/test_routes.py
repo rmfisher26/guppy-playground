@@ -293,6 +293,119 @@ def test_run_noisy_seed_is_reproducible():
         assert d1["results"]["noisy_counts"] == d2["results"]["noisy_counts"]
 
 
+# ── Register names ─────────────────────────────────────────────────────────
+
+NAMED_RESULT_SOURCE = """\
+from guppylang import guppy
+from guppylang.std.builtins import result
+from guppylang.std.quantum import qubit, h, cx, measure
+
+@guppy
+def main() -> None:
+    q0 = qubit()
+    q1 = qubit()
+    h(q0)
+    cx(q0, q1)
+    result("m0", measure(q0))
+    result("m1", measure(q1))
+
+main.check()
+"""
+
+GHZ_SOURCE = """\
+from guppylang import guppy
+from guppylang.std.builtins import array, result
+from guppylang.std.quantum import qubit, h, cx, measure_array
+
+@guppy
+def main() -> None:
+    qubits = array(qubit() for _ in range(5))
+    h(qubits[0])
+    for i in range(4):
+        cx(qubits[i], qubits[i + 1])
+    ms = measure_array(qubits)
+    result("q", ms)
+
+main.check()
+"""
+
+
+def test_run_named_result_returns_register_names():
+    resp = client.post("/run", json={
+        "source": NAMED_RESULT_SOURCE,
+        "shots": 128,
+        "simulator": "stabilizer",
+        "seed": 1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        names = data["results"]["register_names"]
+        assert names is not None
+        assert "m0" in names
+        assert "m1" in names
+
+
+def test_run_anonymous_return_has_no_register_names():
+    """Bell pair returns tuple[bool, bool] — no named results, so register_names is None."""
+    resp = client.post("/run", json={
+        "source": BELL_SOURCE,
+        "shots": 128,
+        "simulator": "stabilizer",
+        "seed": 1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        assert data["results"]["register_names"] is None
+
+
+def test_run_ghz_register_names_are_indexed():
+    """GHZ result("q", array) expands to q[0]..q[4]."""
+    resp = client.post("/run", json={
+        "source": GHZ_SOURCE,
+        "shots": 128,
+        "simulator": "stabilizer",
+        "seed": 1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        names = data["results"]["register_names"]
+        assert names == ["q[0]", "q[1]", "q[2]", "q[3]", "q[4]"]
+
+
+def test_run_named_result_counts_match_shots():
+    """Counts sum to the requested shot count when named results are used."""
+    resp = client.post("/run", json={
+        "source": NAMED_RESULT_SOURCE,
+        "shots": 256,
+        "simulator": "stabilizer",
+        "seed": 7,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        assert sum(data["results"]["counts"].values()) == 256
+
+
+def test_run_register_names_present_in_noisy_run():
+    """register_names is returned even when a noise model is active."""
+    resp = client.post("/run", json={
+        "source": NAMED_RESULT_SOURCE,
+        "shots": 128,
+        "simulator": "stabilizer",
+        "seed": 1,
+        "noise_model": "depolarizing",
+        "error_rate": 0.01,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        assert data["results"]["register_names"] is not None
+        assert data["results"]["noisy_counts"] is not None
+
+
 # ── CORS ───────────────────────────────────────────────────────────────────
 
 def test_cors_header_on_run():
