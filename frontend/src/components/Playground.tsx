@@ -17,7 +17,7 @@ const SIDEBAR_W_CLOSED = 32;
 const DIVIDER_W = 5;
 
 export default function Playground() {
-  const { setExamples, setActiveSlot, setSource, setModified } = usePlaygroundStore();
+  const { setExamples, setActiveSlot, setSource, setModified, setShots, setSimulator, setNoiseModel, setErrorRate } = usePlaygroundStore();
   const isMobile = useMobile();
 
   // Desktop resize state
@@ -101,7 +101,11 @@ export default function Playground() {
     const shared = decodeShareUrl();
     if (shared) {
       setActiveSlot('workspace');
-      setSource(shared);
+      setSource(shared.source);
+      setShots(shared.shots);
+      setSimulator(shared.simulator);
+      setNoiseModel(shared.noiseModel);
+      setErrorRate(shared.errorRate);
       setModified(false);
     } else {
       setActiveSlot('workspace');
