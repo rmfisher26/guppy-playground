@@ -12,8 +12,8 @@ export default function Toolbar() {
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
   function handleShare() {
-    const source = usePlaygroundStore.getState().source;
-    const url = encodeShareUrl(source);
+    const { source, shots, simulator, noiseModel, errorRate } = usePlaygroundStore.getState();
+    const url = encodeShareUrl({ source, shots, simulator, noiseModel, errorRate });
     navigator.clipboard.writeText(url).catch(() => {});
     showToast('Link copied to clipboard');
     setTimeout(() => usePlaygroundStore.getState().hideToast(), 2200);
