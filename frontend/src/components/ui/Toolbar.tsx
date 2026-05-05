@@ -3,10 +3,10 @@ import { usePlaygroundStore } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import { encodeShareUrl } from '../../lib/api';
 import { useMobile } from '../../lib/useMobile';
-import type { SimulatorBackend } from '../../lib/types';
+import type { SimulatorBackend, NoiseModelKind } from '../../lib/types';
 
 export default function Toolbar() {
-  const { shots, setShots, simulator, setSimulator, runState, showToast } = usePlaygroundStore();
+  const { shots, setShots, simulator, setSimulator, noiseModel, setNoiseModel, errorRate, setErrorRate, runState, showToast } = usePlaygroundStore();
   const isMobile = useMobile();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
@@ -37,6 +37,19 @@ export default function Toolbar() {
     { value: 4096, label: '4096' },
     { value: 8192, label: '8192' },
   ];
+
+  type NoiseOption = { value: NoiseModelKind | null; label: string };
+  const noiseOptions: NoiseOption[] = [
+    { value: null,           label: 'Ideal'        },
+    { value: 'depolarizing', label: 'Depolarizing' },
+  ];
+
+  // Log-scale slider: range 0–100 maps to p in [1e-4, 0.1]
+  const sliderToRate = (t: number) => Math.pow(10, -4 + t * 3 / 100);
+  const rateToSlider = (p: number) => Math.round(((Math.log10(p) + 4) / 3) * 100);
+  const fmtRate = (p: number) => p < 0.001
+    ? `${(p * 10000).toFixed(1)}×10⁻⁴`
+    : `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}%`;
 
   return (
     <div style={{
@@ -80,6 +93,36 @@ export default function Toolbar() {
         suffix="shots"
       />
 
+      <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
+
+      {/* Noise model */}
+      <NoiseSelect
+        value={noiseModel}
+        onChange={v => setNoiseModel(v)}
+        options={noiseOptions}
+      />
+
+      {/* Error rate slider — only shown when a noise model is active */}
+      {noiseModel && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={rateToSlider(errorRate)}
+            onChange={e => setErrorRate(sliderToRate(Number(e.target.value)))}
+            style={{ width: isMobile ? 60 : 88, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
+            title={`Error rate p = ${fmtRate(errorRate)}`}
+          />
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            color: 'var(--amber, #f59e0b)', minWidth: 36,
+          }}>
+            {fmtRate(errorRate)}
+          </span>
+        </div>
+      )}
+
       <div style={{ flex: 1 }} />
 
       <button
@@ -92,6 +135,75 @@ export default function Toolbar() {
         <ShareIcon />{!isMobile && ' Share'}
       </button>
 
+    </div>
+  );
+}
+
+// ── Noise model select ────────────────────────────────────────────────────────
+
+function NoiseSelect<T extends string | null>({
+  value, onChange, options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isNoisy = value !== null;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const current = options.find(o => o.value === value);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Noise model"
+        style={{
+          height: 28, padding: '0 8px 0 10px',
+          background: isNoisy ? 'color-mix(in srgb, #f59e0b 12%, var(--bg-raised))' : open ? 'var(--bg-hover)' : 'var(--bg-raised)',
+          border: `1px solid ${isNoisy ? '#f59e0b' : open ? 'var(--teal)' : 'var(--border)'}`,
+          borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 5,
+          transition: 'border-color 0.15s, background 0.15s',
+          whiteSpace: 'nowrap',
+        }}
+        onMouseEnter={e => { if (!open && !isNoisy) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-bright)'; }}
+        onMouseLeave={e => { if (!open && !isNoisy) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+      >
+        <NoiseIcon active={isNoisy} />
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 500, color: isNoisy ? '#f59e0b' : 'var(--text-primary)' }}>
+          {current?.label ?? 'Ideal'}
+        </span>
+        <ChevronIcon open={open} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', right: 0,
+          background: 'var(--bg-raised)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          zIndex: 200, overflow: 'hidden', minWidth: '100%',
+          animation: 'fadeSlideIn 0.1s ease',
+        }}>
+          {options.map(opt => (
+            <DropdownOption
+              key={String(opt.value)}
+              label={opt.label}
+              active={opt.value === value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -264,4 +376,13 @@ function PlayIcon() {
 
 function ShareIcon() {
   return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>;
+}
+
+function NoiseIcon({ active }: { active: boolean }) {
+  const color = active ? '#f59e0b' : 'var(--text-muted)';
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round">
+      <path d="M2 12 Q5 6 8 12 Q11 18 14 12 Q17 6 20 12 Q21.5 15 22 12" />
+    </svg>
+  );
 }

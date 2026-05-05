@@ -10,6 +10,10 @@ class SimulatorBackend(str, Enum):
     statevector = "statevector"  # QuEST — exact amplitudes, max 20 qubits
 
 
+class NoiseModelKind(str, Enum):
+    depolarizing = "depolarizing"
+
+
 class RunRequest(BaseModel):
     source:      str
     filename:    str = "main.py"         # display name shown in error messages
@@ -17,6 +21,8 @@ class RunRequest(BaseModel):
     shots:       int        = Field(1024, ge=1, le=8192)
     simulator:   SimulatorBackend = SimulatorBackend.stabilizer
     seed:        int | None = None
+    noise_model: NoiseModelKind | None = None
+    error_rate:  float = Field(0.001, ge=0.0, le=1.0)
 
 
 # ── Compile output ─────────────────────────────────────────────────────────
@@ -64,6 +70,7 @@ class CompileSuccess(BaseModel):
 
 class SimulationResults(BaseModel):
     counts:           dict[str, int]
+    noisy_counts:     dict[str, int] | None = None
     simulate_time_ms: int
 
 

@@ -1,6 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import { usePlaygroundStore, resolveIsDark } from '../../lib/store';
+
+const IDEAL_COLOR = 'var(--teal)';
+const NOISY_COLOR = '#f59e0b';
 
 export default function ResultsTab() {
   const { runState, theme } = usePlaygroundStore();
@@ -18,21 +24,35 @@ export default function ResultsTab() {
     );
   }
 
-  const { counts, expectation_values, simulate_time_ms } = runState.response.results;
+  const { counts, noisy_counts, expectation_values, simulate_time_ms } = runState.response.results;
   const qubit_count = runState.response.compile?.qubit_count;
-  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const total = entries.reduce((s, [, v]) => s + v, 0);
+  const hasNoise = noisy_counts != null && Object.keys(noisy_counts).length > 0;
 
-  const chartData = entries.map(([basis, count]) => ({
+  // Union of all basis states across both result sets
+  const allBases = Array.from(
+    new Set([...Object.keys(counts), ...(hasNoise ? Object.keys(noisy_counts!) : [])])
+  ).sort();
+
+  const totalIdeal = allBases.reduce((s, b) => s + (counts[b] ?? 0), 0);
+  const totalNoisy = hasNoise
+    ? allBases.reduce((s, b) => s + (noisy_counts![b] ?? 0), 0)
+    : 0;
+
+  const chartData = allBases.map(basis => ({
     basis: `|${basis}⟩`,
-    count,
-    pct: ((count / total) * 100).toFixed(1),
+    ideal: counts[basis] ?? 0,
+    noisy: hasNoise ? (noisy_counts![basis] ?? 0) : undefined,
+    idealPct: totalIdeal > 0 ? (((counts[basis] ?? 0) / totalIdeal) * 100).toFixed(1) : '0.0',
+    noisyPct: hasNoise && totalNoisy > 0
+      ? ((((noisy_counts![basis] ?? 0) / totalNoisy) * 100).toFixed(1))
+      : undefined,
   }));
 
-  const entropy = -entries.reduce((acc, [, v]) => {
-    const p = v / total;
-    return acc + (p > 0 ? p * Math.log2(p) : 0);
-  }, 0).toFixed(3);
+  // Sort descending by ideal count
+  chartData.sort((a, b) => b.ideal - a.ideal);
+
+  const dominantEntry = chartData[0];
+  const total = totalIdeal;
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload?.length) return null;
@@ -43,19 +63,27 @@ export default function ResultsTab() {
         borderRadius: 'var(--radius)', padding: '8px 12px',
         fontFamily: 'var(--font-mono)', fontSize: 11,
       }}>
-        <div style={{ color: 'var(--text-primary)', marginBottom: 2 }}>{d.basis}</div>
-        <div style={{ color: 'var(--teal)' }}>{d.count.toLocaleString()} shots</div>
-        <div style={{ color: 'var(--text-primary)' }}>{d.pct}%</div>
+        <div style={{ color: 'var(--text-primary)', marginBottom: 4 }}>{d.basis}</div>
+        <div style={{ color: IDEAL_COLOR }}>Ideal: {d.ideal.toLocaleString()} · {d.idealPct}%</div>
+        {hasNoise && (
+          <div style={{ color: NOISY_COLOR, marginTop: 2 }}>
+            Noisy: {(d.noisy ?? 0).toLocaleString()} · {d.noisyPct ?? '0.0'}%
+          </div>
+        )}
       </div>
     );
   };
 
+  const barRadius: [number, number, number, number] =
+    chartLayout === 'vertical' ? [0, 3, 3, 0] : [3, 3, 0, 0];
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-      {/* Section header with orientation toggle */}
+      {/* Section header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
           Measurement Outcomes · {total.toLocaleString()} shots
+          {hasNoise && <span style={{ color: NOISY_COLOR, marginLeft: 8 }}>· Noise comparison</span>}
         </div>
         <button
           onClick={() => setChartLayout(l => l === 'vertical' ? 'horizontal' : 'vertical')}
@@ -75,49 +103,72 @@ export default function ResultsTab() {
         </button>
       </div>
 
-      {/* Recharts bar chart */}
+      {/* Chart */}
       {chartLayout === 'vertical' ? (
-        <div style={{ height: Math.max(120, chartData.length * 36), marginBottom: 16 }}>
+        <div style={{ height: Math.max(120, chartData.length * (hasNoise ? 52 : 36)), marginBottom: 16 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 48, top: 4, bottom: 4 }}>
-              <XAxis type="number" hide domain={[0, total]} />
+            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: hasNoise ? 8 : 48, top: 4, bottom: 4 }} barCategoryGap="25%">
+              <XAxis type="number" hide domain={[0, Math.max(totalIdeal, totalNoisy || 0)]} />
               <YAxis
                 type="category" dataKey="basis" width={48}
                 tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--teal-subtle)' }} />
-              <Bar dataKey="count" fill="var(--teal)" radius={[0, 3, 3, 0]} maxBarSize={22}
-                label={({ x, y, width, height, value, index }: any) => {
-                  const pct = chartData[index]?.pct;
+              {hasNoise && (
+                <Legend
+                  wrapperStyle={{ fontFamily: 'var(--font-mono)', fontSize: 10, paddingTop: 4 }}
+                  formatter={(value) => (
+                    <span style={{ color: value === 'ideal' ? IDEAL_COLOR : NOISY_COLOR }}>
+                      {value === 'ideal' ? 'Ideal' : 'Noisy'}
+                    </span>
+                  )}
+                />
+              )}
+              <Bar dataKey="ideal" fill={IDEAL_COLOR} radius={barRadius} maxBarSize={22}
+                label={hasNoise ? undefined : ({ x, y, width, height, value, index }: any) => {
+                  const pct = chartData[index]?.idealPct;
                   return (
                     <text x={x + width + 6} y={y + height / 2}
                       dominantBaseline="middle" textAnchor="start"
                       fontFamily="var(--font-mono)" fontSize={10}
                     >
-                      <tspan fill="var(--teal)">{value.toLocaleString()}</tspan>
+                      <tspan fill={IDEAL_COLOR}>{value.toLocaleString()}</tspan>
                       <tspan fill="var(--text-primary)"> · {pct}%</tspan>
                     </text>
                   );
                 }}
               />
+              {hasNoise && (
+                <Bar dataKey="noisy" fill={NOISY_COLOR} radius={barRadius} maxBarSize={22} />
+              )}
             </BarChart>
           </ResponsiveContainer>
         </div>
       ) : (
         <div style={{ height: Math.max(160, 120 + chartData.length * 8), marginBottom: 16 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: 36, bottom: 4 }}>
+            <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: hasNoise ? 8 : 36, bottom: 4 }} barCategoryGap="25%">
               <XAxis
-                type="category" dataKey="basis" width={48}
+                type="category" dataKey="basis"
                 tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
               />
-              <YAxis type="number" hide domain={[0, total]} />
+              <YAxis type="number" hide domain={[0, Math.max(totalIdeal, totalNoisy || 0)]} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--teal-subtle)' }} />
-              <Bar dataKey="count" fill="var(--teal)" radius={[3, 3, 0, 0]} maxBarSize={40}
-                label={({ x, y, width, value, index }: any) => {
-                  const pct = chartData[index]?.pct;
+              {hasNoise && (
+                <Legend
+                  wrapperStyle={{ fontFamily: 'var(--font-mono)', fontSize: 10, paddingBottom: 4 }}
+                  formatter={(value) => (
+                    <span style={{ color: value === 'ideal' ? IDEAL_COLOR : NOISY_COLOR }}>
+                      {value === 'ideal' ? 'Ideal' : 'Noisy'}
+                    </span>
+                  )}
+                />
+              )}
+              <Bar dataKey="ideal" fill={IDEAL_COLOR} radius={barRadius} maxBarSize={40}
+                label={hasNoise ? undefined : ({ x, y, width, value, index }: any) => {
+                  const pct = chartData[index]?.idealPct;
                   const cx = x + width / 2;
                   return (
                     <text x={cx} y={y - 18}
@@ -125,14 +176,52 @@ export default function ResultsTab() {
                       fontFamily="var(--font-mono)" fontSize={10}
                     >
                       <tspan x={cx} dy="0" fill="var(--text-primary)">{pct}%</tspan>
-                      <tspan x={cx} dy="13" fill="var(--teal)">{value.toLocaleString()}</tspan>
+                      <tspan x={cx} dy="13" fill={IDEAL_COLOR}>{value.toLocaleString()}</tspan>
                     </text>
                   );
                 }}
               />
+              {hasNoise && (
+                <Bar dataKey="noisy" fill={NOISY_COLOR} radius={barRadius} maxBarSize={40} />
+              )}
             </BarChart>
           </ResponsiveContainer>
         </div>
+      )}
+
+      {/* Noise delta table — shown only when noisy results exist */}
+      {hasNoise && (
+        <>
+          <SectionTitle>Ideal vs Noisy</SectionTitle>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr 1fr',
+            gap: '2px 0',
+            marginBottom: 16,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+          }}>
+            {/* Header */}
+            {['State', 'Ideal', 'Noisy', 'Δ'].map(h => (
+              <div key={h} style={{ color: 'var(--text-muted)', padding: '2px 6px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</div>
+            ))}
+            {chartData.map(({ basis, idealPct, noisyPct }) => {
+              const delta = parseFloat(noisyPct ?? '0') - parseFloat(idealPct);
+              const deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(1) + '%';
+              const deltaColor = Math.abs(delta) < 0.5
+                ? 'var(--text-muted)'
+                : delta > 0 ? NOISY_COLOR : 'var(--teal)';
+              return (
+                <React.Fragment key={basis}>
+                  <div style={{ color: 'var(--text-primary)', padding: '3px 6px' }}>{basis}</div>
+                  <div style={{ color: IDEAL_COLOR, padding: '3px 6px' }}>{idealPct}%</div>
+                  <div style={{ color: NOISY_COLOR, padding: '3px 6px' }}>{noisyPct ?? '0.0'}%</div>
+                  <div style={{ color: deltaColor, padding: '3px 6px' }}>{deltaStr}</div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Expectation values */}
@@ -154,8 +243,8 @@ export default function ResultsTab() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {[
           { label: 'Total shots',  value: total.toLocaleString() },
-          { label: 'Outcomes',     value: String(entries.length) },
-          { label: 'Most likely',  value: `|${entries[0][0]}⟩ · ${(((entries[0][1] as number) / total) * 100).toFixed(1)}%` },
+          { label: 'Outcomes',     value: String(chartData.length) },
+          { label: 'Most likely',  value: `${dominantEntry.basis} · ${dominantEntry.idealPct}%` },
           { label: 'Sim time',     value: `${simulate_time_ms}ms` },
           ...(qubit_count != null ? [{ label: 'Qubits', value: String(qubit_count) }] : []),
         ].map(({ label, value }) => (

@@ -16,8 +16,10 @@ async def run_endpoint(req: RunRequest, http_req: Request) -> RunResponse:
     source_preview = req.source[:60].replace("\n", " ").strip()
 
     logger.info(
-        "[%s] POST /run  simulator=%s  shots=%d  source=%r",
-        request_id, req.simulator, req.shots, source_preview,
+        "[%s] POST /run  simulator=%s  shots=%d  noise=%s  p=%s  source=%r",
+        request_id, req.simulator, req.shots,
+        req.noise_model or "ideal", req.error_rate if req.noise_model else "-",
+        source_preview,
     )
 
     result = await compile_and_simulate(
@@ -27,6 +29,8 @@ async def run_endpoint(req: RunRequest, http_req: Request) -> RunResponse:
         seed=req.seed,
         entry_point=req.entry_point,
         filename=req.filename,
+        noise_model=req.noise_model,
+        error_rate=req.error_rate,
     )
 
     if isinstance(result, list):
