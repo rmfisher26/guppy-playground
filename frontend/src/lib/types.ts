@@ -1,6 +1,7 @@
 // ── API TYPES ──────────────────────────────────────────────────────────────
 
 export type SimulatorBackend = 'stabilizer' | 'statevector';
+export type NoiseModelKind = 'depolarizing';
 
 export interface RunRequest {
   source: string;
@@ -9,6 +10,8 @@ export interface RunRequest {
   shots: number;
   simulator: SimulatorBackend;
   seed?: number;
+  noise_model?: NoiseModelKind;
+  error_rate?: number;
 }
 
 export interface HugrNode {
@@ -46,6 +49,7 @@ export interface CompileError {
 
 export interface SimulationResults {
   counts: Record<string, number>;
+  noisy_counts?: Record<string, number>;
   expectation_values?: Record<string, number>;
   statevector?: Array<{ amplitude: [number, number]; basis: string }>;
   simulate_time_ms: number;

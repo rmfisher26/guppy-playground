@@ -8,7 +8,7 @@ across a process boundary.
 
 Worker protocol
 ---------------
-stdin:  JSON  { source, filename, shots, simulator, seed }
+stdin:  JSON  { source, filename, shots, simulator, seed, noise_model, error_rate }
 stdout: JSON  { status: "ok" | "error", ...fields }   (see _compile_worker.py)
 stderr: captured for diagnostics only; never trusted as structured data
 """
@@ -36,6 +36,8 @@ async def compile_and_simulate(
     seed: int | None = None,
     entry_point: str | None = None,
     filename: str = "main.py",
+    noise_model: str | None = None,
+    error_rate: float = 0.001,
 ) -> tuple[CompileSuccess, SimulationResults] | list[CompileError]:
     """Compile and simulate a Guppy program in one sandboxed subprocess.
 
@@ -46,6 +48,8 @@ async def compile_and_simulate(
         seed:        Optional RNG seed for reproducible results.
         entry_point: Name of the @guppy function to run (defaults to worker heuristic).
         filename:    Filename reported in compile error messages.
+        noise_model: Noise model kind ("depolarizing") or None for ideal simulation.
+        error_rate:  Per-gate error probability for the noise model.
 
     Returns:
         ``(CompileSuccess, SimulationResults)`` on success, or
@@ -56,11 +60,13 @@ async def compile_and_simulate(
     result = await run_subprocess(
         [sys.executable, str(WORKER)],
         input_data=json.dumps({
-            "source":    source,
-            "filename":  filename,
-            "shots":     shots,
-            "simulator": simulator,
-            "seed":      seed,
+            "source":      source,
+            "filename":    filename,
+            "shots":       shots,
+            "simulator":   simulator,
+            "seed":        seed,
+            "noise_model": noise_model,
+            "error_rate":  error_rate,
         }),
         timeout=TIMEOUT,
     )
@@ -111,6 +117,7 @@ async def compile_and_simulate(
 
     sim_ok = SimulationResults(
         counts=data.get("counts", {}),
+        noisy_counts=data.get("noisy_counts"),
         simulate_time_ms=elapsed_ms,
     )
 

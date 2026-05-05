@@ -199,6 +199,160 @@ def test_allowed_origins_single_value():
     assert s.origins_list == ["http://localhost:4321"]
 
 
+# ── Noise model model tests ────────────────────────────────────────────────
+
+class TestNoiseModelValidation:
+    def test_noise_model_defaults_to_none(self):
+        from app.models import RunRequest
+        req = RunRequest(source="x", simulator="stabilizer")
+        assert req.noise_model is None
+
+    def test_noise_model_depolarizing_accepted(self):
+        from app.models import RunRequest, NoiseModelKind
+        req = RunRequest(source="x", simulator="stabilizer", noise_model="depolarizing")
+        assert req.noise_model == NoiseModelKind.depolarizing
+
+    def test_error_rate_default(self):
+        from app.models import RunRequest
+        req = RunRequest(source="x", simulator="stabilizer")
+        assert req.error_rate == 0.001
+
+    def test_error_rate_clamped_at_zero(self):
+        from app.models import RunRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            RunRequest(source="x", simulator="stabilizer", error_rate=-0.1)
+
+    def test_error_rate_clamped_at_one(self):
+        from app.models import RunRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            RunRequest(source="x", simulator="stabilizer", error_rate=1.5)
+
+    def test_invalid_noise_model_rejected(self):
+        from app.models import RunRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            RunRequest(source="x", simulator="stabilizer", noise_model="bit_flip_doesnt_exist")
+
+
+class TestSimulationResultsNoisyField:
+    def test_noisy_counts_absent_by_default(self):
+        from app.models import SimulationResults
+        r = SimulationResults(counts={"00": 512, "11": 512}, simulate_time_ms=10)
+        assert r.noisy_counts is None
+        assert r.model_dump()["noisy_counts"] is None
+
+    def test_noisy_counts_present_when_set(self):
+        from app.models import SimulationResults
+        r = SimulationResults(
+            counts={"00": 512, "11": 512},
+            noisy_counts={"00": 480, "11": 510, "01": 22, "10": 12},
+            simulate_time_ms=20,
+        )
+        assert r.noisy_counts is not None
+        assert sum(r.noisy_counts.values()) == 1024
+
+
+# ── Flatten counts unit test ───────────────────────────────────────────────
+
+def test_flatten_counts_helper():
+    from app._compile_worker import _flatten_counts
+
+    class FakeShot:
+        def __init__(self, entries):
+            self.entries = entries
+
+    class FakeResult:
+        def __init__(self, shots):
+            self.results = [FakeShot(s) for s in shots]
+
+    result = FakeResult([
+        [("q", False), ("q", False)],   # 00
+        [("q", True),  ("q", True)],    # 11
+        [("q", False), ("q", False)],   # 00
+    ])
+    counts = _flatten_counts(result)
+    assert counts == {"00": 2, "11": 1}
+
+
+def test_flatten_counts_array_register():
+    from app._compile_worker import _flatten_counts
+
+    class FakeShot:
+        def __init__(self, entries):
+            self.entries = entries
+
+    class FakeResult:
+        def __init__(self, shots):
+            self.results = [FakeShot(s) for s in shots]
+
+    result = FakeResult([
+        [("q", [True, False, True])],   # 101
+        [("q", [False, False, False])], # 000
+    ])
+    counts = _flatten_counts(result)
+    assert counts == {"101": 1, "000": 1}
+
+
+# ── Compiler passes noise params through ───────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_compiler_passes_noise_params():
+    from unittest.mock import AsyncMock, patch, call
+    from app.sandbox import SubprocessResult
+    from app.compiler import compile_and_simulate
+    import json as _json
+
+    worker_ok = SubprocessResult(
+        stdout=_json.dumps({
+            "status": "ok", "counts": {"00": 64}, "noisy_counts": {"00": 60, "01": 4},
+            "hugr_nodes": [], "hugr_json": None, "warnings": [], "qubit_count": 2,
+        }),
+        stderr="", returncode=0, timed_out=False,
+    )
+    with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=worker_ok)) as mock_sub:
+        result = await compile_and_simulate(
+            "x", shots=64, simulator="stabilizer",
+            noise_model="depolarizing", error_rate=0.01,
+        )
+
+    # Verify noise params were included in the stdin JSON sent to the worker
+    called_input = mock_sub.call_args.kwargs["input_data"]
+    payload = _json.loads(called_input)
+    assert payload["noise_model"] == "depolarizing"
+    assert payload["error_rate"] == 0.01
+
+    # Verify noisy_counts surfaced in the result
+    assert not isinstance(result, list)
+    compile_ok, sim_ok = result
+    assert sim_ok.noisy_counts == {"00": 60, "01": 4}
+
+
+@pytest.mark.asyncio
+async def test_compiler_no_noise_model_sends_none():
+    from unittest.mock import AsyncMock, patch
+    from app.sandbox import SubprocessResult
+    from app.compiler import compile_and_simulate
+    import json as _json
+
+    worker_ok = SubprocessResult(
+        stdout=_json.dumps({
+            "status": "ok", "counts": {"00": 64}, "noisy_counts": None,
+            "hugr_nodes": [], "hugr_json": None, "warnings": [], "qubit_count": 2,
+        }),
+        stderr="", returncode=0, timed_out=False,
+    )
+    with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=worker_ok)) as mock_sub:
+        result = await compile_and_simulate("x", shots=64, simulator="stabilizer")
+
+    payload = _json.loads(mock_sub.call_args.kwargs["input_data"])
+    assert payload["noise_model"] is None
+
+    compile_ok, sim_ok = result
+    assert sim_ok.noisy_counts is None
+
+
 # ── Compiler unit tests (error paths) ─────────────────────────────────────
 
 @pytest.mark.asyncio
