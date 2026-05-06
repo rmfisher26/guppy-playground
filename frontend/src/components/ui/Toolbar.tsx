@@ -51,90 +51,134 @@ export default function Toolbar() {
     ? `${(p * 10000).toFixed(1)}×10⁻⁴`
     : `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}%`;
 
-  return (
+  const noiseRow = (
     <div style={{
-      height: 'var(--toolbar-h)', background: 'var(--bg-surface)',
-      borderBottom: '1px solid var(--border)', display: 'flex',
-      alignItems: 'center', padding: '0 12px', gap: 8, flexShrink: 0,
+      height: 36, display: 'flex', alignItems: 'center',
+      padding: '0 12px', gap: 8,
+      borderTop: '1px solid var(--border)',
     }}>
-      {/* Run button */}
-      <button
-        style={{
-          ...btnBase,
-          background: isRunning ? 'var(--teal-dim)' : 'var(--teal)',
-          color: 'var(--navy)', fontWeight: 600, padding: '0 16px',
-          cursor: isRunning ? 'not-allowed' : 'pointer',
-          opacity: isRunning ? 0.85 : 1,
-        }}
-        onClick={() => !isRunning && run()}
-        title="Run (Ctrl+Enter)"
-      >
-        {isRunning
-          ? <><Spinner /> Running…</>
-          : <><PlayIcon /> Run</>
-        }
-      </button>
-
-      <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
-
-      {/* Simulator */}
-      <CustomSelect
-        value={simulator}
-        onChange={v => setSimulator(v)}
-        options={simulatorOptions}
-        suffix="shots"
-      />
-
-      {/* Shots */}
-      <CustomSelect
-        value={shots}
-        onChange={v => setShots(v)}
-        options={shotOptions}
-        suffix="shots"
-      />
-
-      <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
-
-      {/* Noise model */}
       <NoiseSelect
         value={noiseModel}
         onChange={v => setNoiseModel(v)}
         options={noiseOptions}
       />
-
-      {/* Error rate slider — only shown when a noise model is active */}
       {noiseModel && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
           <input
             type="range"
             min={0}
             max={100}
             value={rateToSlider(errorRate)}
             onChange={e => setErrorRate(sliderToRate(Number(e.target.value)))}
-            style={{ width: isMobile ? 60 : 88, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
+            style={{ flex: 1, minWidth: 0, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
             title={`Error rate p = ${fmtRate(errorRate)}`}
           />
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 11,
-            color: 'var(--amber, #f59e0b)', minWidth: 36,
+            color: 'var(--amber, #f59e0b)', minWidth: 40, textAlign: 'right',
           }}>
             {fmtRate(errorRate)}
           </span>
         </div>
       )}
+    </div>
+  );
 
-      <div style={{ flex: 1 }} />
+  return (
+    <div style={{
+      background: 'var(--bg-surface)',
+      borderBottom: '1px solid var(--border)',
+      flexShrink: 0,
+    }}>
+      {/* Primary row */}
+      <div style={{
+        height: 'var(--toolbar-h)', display: 'flex',
+        alignItems: 'center', padding: '0 12px', gap: 8,
+      }}>
+        {/* Run button */}
+        <button
+          style={{
+            ...btnBase,
+            background: isRunning ? 'var(--teal-dim)' : 'var(--teal)',
+            color: 'var(--navy)', fontWeight: 600, padding: '0 16px',
+            cursor: isRunning ? 'not-allowed' : 'pointer',
+            opacity: isRunning ? 0.85 : 1,
+          }}
+          onClick={() => !isRunning && run()}
+          title="Run (Ctrl+Enter)"
+        >
+          {isRunning
+            ? <><Spinner /> Running…</>
+            : <><PlayIcon /> Run</>
+          }
+        </button>
 
-      <button
-        style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
-        onClick={handleShare}
-        title="Copy share link"
-        onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
-        onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
-      >
-        <ShareIcon />{!isMobile && ' Share'}
-      </button>
+        <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
 
+        {/* Simulator */}
+        <CustomSelect
+          value={simulator}
+          onChange={v => setSimulator(v)}
+          options={simulatorOptions}
+          suffix="shots"
+        />
+
+        {/* Shots */}
+        <CustomSelect
+          value={shots}
+          onChange={v => setShots(v)}
+          options={shotOptions}
+          suffix="shots"
+        />
+
+        {/* Desktop-only: divider + noise controls inline */}
+        {!isMobile && (
+          <>
+            <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
+
+            <NoiseSelect
+              value={noiseModel}
+              onChange={v => setNoiseModel(v)}
+              options={noiseOptions}
+            />
+
+            {noiseModel && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={rateToSlider(errorRate)}
+                  onChange={e => setErrorRate(sliderToRate(Number(e.target.value)))}
+                  style={{ width: 88, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
+                  title={`Error rate p = ${fmtRate(errorRate)}`}
+                />
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11,
+                  color: 'var(--amber, #f59e0b)', minWidth: 36,
+                }}>
+                  {fmtRate(errorRate)}
+                </span>
+              </div>
+            )}
+          </>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        <button
+          style={{ ...btnBase, background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }}
+          onClick={handleShare}
+          title="Copy share link"
+          onMouseEnter={e => { const el = e.currentTarget; el.style.color = 'var(--text-secondary)'; el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg-raised)'; }}
+          onMouseLeave={e => { const el = e.currentTarget; el.style.color = 'var(--text-muted)'; el.style.borderColor = 'transparent'; el.style.background = 'transparent'; }}
+        >
+          <ShareIcon />{!isMobile && ' Share'}
+        </button>
+      </div>
+
+      {/* Mobile-only second row: noise model + slider */}
+      {isMobile && noiseRow}
     </div>
   );
 }
