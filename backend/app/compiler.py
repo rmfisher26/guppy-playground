@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from .config import DEFAULT_VERSION, SELENE_VERSION, SUPPORTED_VERSIONS
+from .config import COMPATIBLE_VERSIONS, DEFAULT_VERSION, SUPPORTED_VERSIONS
 from .models import (
     CompileError, CompileSuccess, CompileWarning,
     ErrorKind, HugrNode, SimulationResults,
@@ -38,10 +38,11 @@ def _worker_command(version: str | None) -> list[str]:
     """
     if version is None or version == DEFAULT_VERSION:
         return [sys.executable, str(WORKER)]
+    selene_ver = COMPATIBLE_VERSIONS[version]["selene_sim"]
     return [
         "uv", "run",
         "--with", f"guppylang=={version}",
-        "--with", f"selene-sim=={SELENE_VERSION}",
+        "--with", f"selene-sim=={selene_ver}",
         str(WORKER),
     ]
 
