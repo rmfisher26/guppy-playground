@@ -1,4 +1,12 @@
-import type { RunRequest, RunResponse, HealthResponse, ExamplesResponse } from './types';
+import type { RunRequest, RunResponse, HealthResponse, ExamplesResponse, SimulatorBackend, NoiseModelKind } from './types';
+
+export type ShareConfig = {
+  source: string;
+  shots: number;
+  simulator: SimulatorBackend;
+  noiseModel: NoiseModelKind | null;
+  errorRate: number;
+};
 
 const BASE_URL = import.meta.env.PUBLIC_API_URL ?? '/api';
 
@@ -41,22 +49,29 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>('/health');
 }
 
-// Encode editor source into URL hash for share links
-export function encodeShareUrl(source: string): string {
-  const encoded = btoa(encodeURIComponent(source));
+// Encode the full run config into URL hash for share links
+export function encodeShareUrl(config: ShareConfig): string {
+  const encoded = btoa(encodeURIComponent(JSON.stringify(config)));
   const url = new URL(window.location.href);
   url.hash = `code=${encoded}`;
   return url.toString();
 }
 
-// Decode source from URL hash on page load
-export function decodeShareUrl(): string | null {
+// Decode run config from URL hash on page load.
+// Handles both the current JSON format and legacy source-only links.
+export function decodeShareUrl(): ShareConfig | null {
   if (typeof window === 'undefined') return null;
   const hash = window.location.hash;
   const match = hash.match(/^#code=(.+)$/);
   if (!match) return null;
   try {
-    return decodeURIComponent(atob(match[1]));
+    const raw = decodeURIComponent(atob(match[1]));
+    try {
+      return JSON.parse(raw) as ShareConfig;
+    } catch {
+      // Legacy format: plain source string
+      return { source: raw, shots: 1024, simulator: 'stabilizer', noiseModel: null, errorRate: 0.001 };
+    }
   } catch {
     return null;
   }

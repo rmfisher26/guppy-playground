@@ -31,11 +31,13 @@ MAX_QUBITS_STABILIZER  = 50
 
 def main() -> None:
     payload    = json.loads(sys.stdin.read())
-    source: str       = payload["source"]
-    filename: str     = payload.get("filename", "main.py")
-    shots: int        = payload.get("shots", 1024)
-    simulator: str    = payload.get("simulator", "stabilizer")
-    seed: int | None  = payload.get("seed")
+    source: str         = payload["source"]
+    filename: str       = payload.get("filename", "main.py")
+    shots: int          = payload.get("shots", 1024)
+    simulator: str      = payload.get("simulator", "stabilizer")
+    seed: int | None    = payload.get("seed")
+    noise_model: str | None = payload.get("noise_model")
+    error_rate: float   = float(payload.get("error_rate", 0.001))
 
     # importlib requires a real file path, and guppylang reads the source file
     # directly to build error spans — exec(source) would lose that information.
@@ -46,7 +48,7 @@ def main() -> None:
     try:
         tmpfile.write(source)
         tmpfile.close()
-        _run(tmppath, source, shots, simulator, seed)
+        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate)
     except Exception as exc:
         errors = _parse_error(exc, source, traceback.format_exc(), filename)
         print(json.dumps({"status": "error", "errors": errors}))
@@ -57,7 +59,7 @@ def main() -> None:
             pass
 
 
-def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None) -> None:
+def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001) -> None:
     from guppylang.defs import GuppyFunctionDefinition
 
     spec = importlib.util.spec_from_file_location("_guppy_user", tmppath)
@@ -141,9 +143,45 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         else:
             raise
 
-    # Flatten each shot's register entries into a single bit-string key.
-    # Registers can be scalar booleans or boolean arrays (qubit arrays);
-    # both are normalised to "0"/"1" characters and concatenated.
+    counts          = _flatten_counts(result)
+    register_names  = _extract_register_names(result)
+
+    # Noisy simulation — only supported on stabilizer backend
+    noisy_counts: dict[str, int] | None = None
+    if noise_model == "depolarizing":
+        try:
+            from selene_sim import DepolarizingErrorModel
+            p = max(0.0, min(1.0, error_rate))
+            error_model_obj = DepolarizingErrorModel(p_1q=p, p_2q=p, p_meas=p, p_init=p)
+            noisy_em = (
+                guppy_fn.emulator(n_qubits=n_qubits)
+                .with_shots(shots)
+                .with_error_model(error_model_obj)
+                .stabilizer_sim()
+            )
+            if seed is not None:
+                noisy_em = noisy_em.with_seed(seed)
+            noisy_result = noisy_em.run()
+            noisy_counts = _flatten_counts(noisy_result)
+        except Exception:
+            pass  # if noisy sim fails, return ideal counts only
+
+    print(json.dumps({
+        "status":          "ok",
+        "counts":          counts,
+        "noisy_counts":    noisy_counts,
+        "register_names":  register_names,
+        "hugr_nodes":      hugr_nodes,
+        "hugr_json":       hugr_json,
+        "warnings":        [],
+        "qubit_count":     n_qubits,
+    }))
+
+
+# ── Result helpers ────────────────────────────────────────────────────────
+
+def _flatten_counts(result) -> dict[str, int]:
+    """Flatten shot register entries into bitstring → count mapping."""
     counts: dict[str, int] = {}
     for shot in result.results:
         parts = []
@@ -154,15 +192,33 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
                 parts.append(str(int(v)))
         key = "".join(parts)
         counts[key] = counts.get(key, 0) + 1
+    return counts
 
-    print(json.dumps({
-        "status":      "ok",
-        "counts":      counts,
-        "hugr_nodes":  hugr_nodes,
-        "hugr_json":   hugr_json,
-        "warnings":    [],
-        "qubit_count": n_qubits,
-    }))
+
+def _extract_register_names(result) -> list[str] | None:
+    """Return per-bit register names from the first shot, or None for anonymous returns.
+
+    Uses QsysShot.to_register_bits() which handles scalar booleans, boolean arrays,
+    and the reg[n] indexed tag convention.  Multi-bit registers are expanded:
+      {"q": "011"} → ["q[0]", "q[1]", "q[2]"]
+    Purely numeric tag names (anonymous tuple returns) are suppressed so callers
+    receive None rather than uninformative labels like ["0", "1"].
+    """
+    if not result.results:
+        return None
+    reg_bits = result.results[0].to_register_bits()
+    if not reg_bits:
+        return None
+    names: list[str] = []
+    for reg, bits in reg_bits.items():
+        if len(bits) == 1:
+            names.append(reg)
+        else:
+            names.extend(f"{reg}[{i}]" for i in range(len(bits)))
+    # Positional / anonymous returns use digit-only tag names — suppress them
+    if all(re.fullmatch(r"\d+", n.split("[")[0]) for n in names):
+        return None
+    return names or None
 
 
 # ── Error rendering ────────────────────────────────────────────────────────

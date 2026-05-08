@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { RunState, OutputTab, Example, CompileError } from './types';
+import type { RunState, OutputTab, Example, CompileError, NoiseModelKind } from './types';
 import { DEFAULT_SOURCE } from './defaultSource';
 
 export type Theme = 'dark' | 'light' | 'system';
@@ -45,6 +45,10 @@ interface PlaygroundStore {
   setSimulator: (s: 'stabilizer' | 'statevector') => void;
   seed: number | undefined;
   setSeed: (n: number | undefined) => void;
+  noiseModel: NoiseModelKind | null;
+  setNoiseModel: (m: NoiseModelKind | null) => void;
+  errorRate: number;
+  setErrorRate: (r: number) => void;
 
   // Active slot — 'workspace' or an example id
   activeSlot: ActiveSlot;
@@ -99,6 +103,10 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   setSimulator: (simulator) => set({ simulator }),
   seed: undefined,
   setSeed: (seed) => set({ seed }),
+  noiseModel: null,
+  setNoiseModel: (noiseModel) => set({ noiseModel }),
+  errorRate: 0.001,
+  setErrorRate: (errorRate) => set({ errorRate }),
 
   activeSlot: 'workspace',
   setActiveSlot: (activeSlot) => set({ activeSlot }),

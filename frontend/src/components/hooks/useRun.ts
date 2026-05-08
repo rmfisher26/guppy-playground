@@ -30,7 +30,7 @@ export function useRun() {
   }, []);
 
   async function run() {
-    const { source, shots, simulator, seed, activeSlot, examples, setRunState, setActiveTab } =
+    const { source, shots, simulator, seed, noiseModel, errorRate, activeSlot, examples, setRunState, setActiveTab } =
       usePlaygroundStore.getState();
 
     const isRunning = ['compiling', 'simulating', 'preparing'].includes(store.runState.status);
@@ -49,7 +49,10 @@ export function useRun() {
     setActiveTab('output');
 
     try {
-      const response = await apiRun({ source, filename, shots, simulator, seed });
+      const response = await apiRun({
+        source, filename, shots, simulator, seed,
+        ...(noiseModel ? { noise_model: noiseModel, error_rate: errorRate } : {}),
+      });
       const elapsed_ms = Math.round(performance.now() - start);
 
       if (response.status === 'ok') {
