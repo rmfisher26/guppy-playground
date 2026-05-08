@@ -94,6 +94,7 @@ export interface ExamplesResponse {
 export interface VersionsResponse {
   versions: string[];
   default_version: string;
+  version_deps: Record<string, string>;  // guppy version → selene-sim version
 }
 
 export type RunState =

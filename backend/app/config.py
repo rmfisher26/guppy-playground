@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # The first entry is the default shown on page load.
 COMPATIBLE_VERSIONS: dict[str, dict] = {
     "0.21.11": {"selene_sim": "0.2.13", "tested": True},
-    "0.21.0":  {"selene_sim": "0.2.10", "tested": False},
+    "0.21.0":  {"selene_sim": "0.2.13", "tested": False},
 }
 
 SUPPORTED_VERSIONS: list[str] = list(COMPATIBLE_VERSIONS.keys())

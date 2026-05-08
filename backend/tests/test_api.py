@@ -179,6 +179,73 @@ def test_run_request_invalid_simulator():
         RunRequest(source="x", simulator="not_real")
 
 
+# ── Compiler version dispatch tests ───────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_compiler_rejects_unknown_version():
+    from app.compiler import compile_and_simulate
+    from app.models import ErrorKind
+
+    result = await compile_and_simulate("x", shots=64, simulator="stabilizer", version="0.0.0.not.real")
+    assert isinstance(result, list)
+    assert result[0].kind == ErrorKind.internal_error
+    assert "unsupported" in result[0].message.lower()
+
+
+def test_worker_command_uses_sys_executable_for_none():
+    import sys
+    from app.compiler import _worker_command
+
+    assert _worker_command(None)[0] == sys.executable
+
+
+def test_worker_command_uses_sys_executable_for_default():
+    import sys
+    from app.compiler import _worker_command
+    from app.config import DEFAULT_VERSION
+
+    assert _worker_command(DEFAULT_VERSION)[0] == sys.executable
+
+
+def test_worker_command_uses_uv_for_non_default():
+    from app.compiler import _worker_command
+    from app.config import COMPATIBLE_VERSIONS, DEFAULT_VERSION
+
+    non_default = next(
+        (v for v in COMPATIBLE_VERSIONS if v != DEFAULT_VERSION and COMPATIBLE_VERSIONS[v]["tested"]),
+        None,
+    )
+    if non_default is None:
+        pytest.skip("No tested non-default version configured")
+
+    cmd = _worker_command(non_default)
+    assert cmd[0] == "uv"
+    assert f"guppylang=={non_default}" in cmd
+    assert any(f"selene-sim=={COMPATIBLE_VERSIONS[non_default]['selene_sim']}" in c for c in cmd)
+
+
+@pytest.mark.asyncio
+async def test_compiler_version_param_sent_to_worker():
+    from unittest.mock import AsyncMock, patch
+    from app.sandbox import SubprocessResult
+    from app.compiler import compile_and_simulate
+    from app.config import DEFAULT_VERSION
+    import json as _json
+
+    worker_ok = SubprocessResult(
+        stdout=_json.dumps({
+            "status": "ok", "counts": {"00": 64}, "noisy_counts": None,
+            "hugr_nodes": [], "hugr_json": None, "warnings": [], "qubit_count": 2,
+        }),
+        stderr="", returncode=0, timed_out=False,
+    )
+    with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=worker_ok)) as mock_sub:
+        await compile_and_simulate("x", shots=64, simulator="stabilizer", version=DEFAULT_VERSION)
+
+    payload = _json.loads(mock_sub.call_args.kwargs["input_data"])
+    assert payload["version"] == DEFAULT_VERSION
+
+
 # ── Config unit tests ──────────────────────────────────────────────────────
 
 def test_allowed_origins_json_array():

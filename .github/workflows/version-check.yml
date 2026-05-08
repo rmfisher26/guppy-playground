@@ -157,7 +157,7 @@ jobs:
           - [ ] Mark any version as \`"tested": False\` if you want to exclude it from the picker for now
           BODY
           )" \
-            --base main \
+            --base feature/versions \
             --head "$BRANCH"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

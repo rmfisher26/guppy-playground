@@ -52,7 +52,8 @@ interface PlaygroundStore {
   guppyVersion: string;
   setGuppyVersion: (v: string) => void;
   availableVersions: string[];
-  setAvailableVersions: (versions: string[], defaultVersion: string) => void;
+  versionDeps: Record<string, string>;
+  setAvailableVersions: (versions: string[], defaultVersion: string, deps: Record<string, string>) => void;
 
   // Active slot — 'workspace' or an example id
   activeSlot: ActiveSlot;
@@ -114,8 +115,9 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   guppyVersion: '',
   setGuppyVersion: (guppyVersion) => set({ guppyVersion }),
   availableVersions: [],
-  setAvailableVersions: (versions, defaultVersion) =>
-    set((s) => ({ availableVersions: versions, guppyVersion: s.guppyVersion || defaultVersion })),
+  versionDeps: {},
+  setAvailableVersions: (versions, defaultVersion, deps) =>
+    set((s) => ({ availableVersions: versions, versionDeps: deps, guppyVersion: s.guppyVersion || defaultVersion })),
 
   activeSlot: 'workspace',
   setActiveSlot: (activeSlot) => set({ activeSlot }),

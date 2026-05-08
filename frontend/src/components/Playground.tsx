@@ -118,7 +118,7 @@ export default function Playground() {
 
     fetchVersions()
       .then(res => {
-        setAvailableVersions(res.versions, res.default_version);
+        setAvailableVersions(res.versions, res.default_version, res.version_deps);
         const shared = decodeShareUrl();
         if (shared?.guppyVersion) setGuppyVersion(shared.guppyVersion);
       })

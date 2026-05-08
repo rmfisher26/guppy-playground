@@ -125,3 +125,4 @@ class HealthResponse(BaseModel):
 class VersionsResponse(BaseModel):
     versions:        list[str]
     default_version: str
+    version_deps:    dict[str, str]  # guppy version → selene-sim version
