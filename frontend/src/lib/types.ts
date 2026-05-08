@@ -36,6 +36,7 @@ export interface CompileSuccess {
   qubit_count: number;
   warnings: CompileWarning[];
   compile_time_ms: number;
+  qasm?: string;
 }
 
 export type ErrorKind = 'linearity_error' | 'type_error' | 'syntax_error' | 'name_error' | 'internal_error';
@@ -101,4 +102,4 @@ export type RunState =
   | { status: 'rate_limited'; retry_after_ms: number }
   | { status: 'internal_error'; message: string };
 
-export type OutputTab = 'output' | 'results' | 'hugr';
+export type OutputTab = 'output' | 'results' | 'hugr' | 'qasm';

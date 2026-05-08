@@ -166,6 +166,8 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         except Exception:
             pass  # if noisy sim fails, return ideal counts only
 
+    qasm = _hugr_to_qasm(hugr_json) if hugr_json else None
+
     print(json.dumps({
         "status":          "ok",
         "counts":          counts,
@@ -173,6 +175,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         "register_names":  register_names,
         "hugr_nodes":      hugr_nodes,
         "hugr_json":       hugr_json,
+        "qasm":            qasm,
         "warnings":        [],
         "qubit_count":     n_qubits,
     }))
@@ -427,6 +430,226 @@ def _infer_nodes(source: str) -> list[dict]:
             elif op in measure_ops and op not in seen:
                 add("Measure", op, 2); seen.add(op)
     return nodes
+
+
+# ── HUGR → OpenQASM 2.0 ───────────────────────────────────────────────────
+
+def _hugr_to_qasm(hugr_json: dict) -> str | None:
+    """Convert HUGR JSON to OpenQASM 2.0. Returns None on any failure."""
+    try:
+        return _do_hugr_to_qasm(hugr_json)
+    except Exception:
+        return None
+
+
+def _do_hugr_to_qasm(hugr_json: dict) -> str | None:
+    if not hugr_json or 'modules' not in hugr_json:
+        return None
+
+    mod   = hugr_json['modules'][0]
+    nodes = mod['nodes']
+    edges = mod.get('edges', [])
+
+    # Build directed wire maps: output port → input port (and reverse)
+    wire_map: dict[tuple, tuple] = {}
+    rev_wire: dict[tuple, tuple] = {}
+    for edge in edges:
+        (sn, sp), (dn, dp) = edge
+        if sp is not None and dp is not None:
+            wire_map[(sn, sp)] = (dn, dp)
+            rev_wire[(dn, dp)] = (sn, sp)
+
+    def get_ports(node: dict, kind: str) -> list:
+        sig = node.get('signature', {})
+        return sig.get(kind) or sig.get('body', {}).get(kind) or []
+
+    def is_qubit(ty: object) -> bool:
+        return isinstance(ty, dict) and ty.get('t') == 'Q'
+
+    # Find the DataflowBlock that owns the QAlloc nodes
+    dfb_idx = None
+    for idx, node in enumerate(nodes):
+        if node.get('op') == 'DataflowBlock':
+            if any(
+                n.get('parent') == idx
+                and n.get('extension') == 'tket.quantum'
+                and n.get('name') == 'QAlloc'
+                for n in nodes
+            ):
+                dfb_idx = idx
+                break
+    if dfb_idx is None:
+        return None
+
+    block = [i for i, n in enumerate(nodes) if n.get('parent') == dfb_idx]
+
+    GATE_MAP = {
+        'H': 'h', 'X': 'x', 'Y': 'y', 'Z': 'z',
+        'S': 's', 'T': 't', 'Sdg': 'sdg', 'Tdg': 'tdg',
+        'CX': 'cx', 'CZ': 'cz', 'CY': 'cy', 'SWAP': 'swap',
+        'CCX': 'ccx', 'Toffoli': 'ccx',
+        'Rz': 'rz', 'Rx': 'rx', 'Ry': 'ry',
+    }
+    MEASURE_OPS = {'Measure', 'MeasureFree'}
+    SKIP_OPS    = {'QAlloc', 'QFree', 'Discard', 'Reset', 'TryQAlloc'}
+
+    q_ops:   dict[int, dict] = {}
+    q_allocs: list[int]       = []
+    for idx in block:
+        node = nodes[idx]
+        if node.get('extension') == 'tket.quantum':
+            name = node.get('name', '')
+            if name == 'QAlloc':
+                q_allocs.append(idx)
+            elif name and name not in SKIP_OPS:
+                q_ops[idx] = node
+
+    if not q_allocs:
+        return None
+
+    # Propagate qubit IDs forward: wire_qubit[(src_n, src_p)] = qubit_id
+    wire_qubit: dict[tuple, int] = {}
+    next_qid = [0]
+
+    def follow(src_n: int, src_p: int, qid: int) -> None:
+        wire_qubit[(src_n, src_p)] = qid
+        dest = wire_map.get((src_n, src_p))
+        if not dest:
+            return
+        dn, dp = dest
+        if dn >= len(nodes):
+            return
+        dst = nodes[dn]
+        if dst.get('extension') == 'tket.quantum':
+            # tket.quantum gates are linear: input qubit port dp → output qubit port dp
+            out_types = get_ports(dst, 'output')
+            if dp < len(out_types) and is_qubit(out_types[dp]):
+                follow(dn, dp, qid)
+
+    for qa in q_allocs:
+        follow(qa, 0, next_qid[0])
+        next_qid[0] += 1
+
+    n_qubits = next_qid[0]
+
+    # Build dependency graph: gate B depends on gate A if a qubit wire runs A→B
+    from collections import deque
+    preds: dict[int, set] = {i: set() for i in q_ops}
+    succs: dict[int, set] = {i: set() for i in q_ops}
+    for idx in q_ops:
+        for p, ty in enumerate(get_ports(q_ops[idx], 'input')):
+            if not is_qubit(ty):
+                continue
+            src = rev_wire.get((idx, p))
+            if src and src[0] in q_ops:
+                preds[idx].add(src[0])
+                succs[src[0]].add(idx)
+
+    # Kahn's topological sort
+    in_deg = {i: len(preds[i]) for i in q_ops}
+    queue  = deque(i for i in q_ops if in_deg[i] == 0)
+    order: list[int] = []
+    while queue:
+        cur = queue.popleft()
+        order.append(cur)
+        for suc in succs[cur]:
+            in_deg[suc] -= 1
+            if in_deg[suc] == 0:
+                queue.append(suc)
+
+    # Emit OpenQASM 2.0
+    n_meas = sum(1 for i in order if q_ops[i].get('name') in MEASURE_OPS)
+    lines  = ['OPENQASM 2.0;', 'include "qelib1.inc";', '']
+    if n_qubits > 0:
+        lines.append(f'qreg q[{n_qubits}];')
+    if n_meas > 0:
+        lines.append(f'creg c[{n_meas}];')
+    lines.append('')
+
+    meas_idx = 0
+    for idx in order:
+        node   = q_ops[idx]
+        name   = node.get('name', '')
+        in_tys = get_ports(node, 'input')
+        qubits = []
+        for p, ty in enumerate(in_tys):
+            if not is_qubit(ty):
+                continue
+            src = rev_wire.get((idx, p))
+            if src:
+                qid = wire_qubit.get(src)
+                if qid is not None:
+                    qubits.append(qid)
+
+        if name in MEASURE_OPS:
+            for qid in qubits:
+                lines.append(f'measure q[{qid}] -> c[{meas_idx}];')
+                meas_idx += 1
+        elif name in GATE_MAP and qubits:
+            gate  = GATE_MAP[name]
+            q_str = ', '.join(f'q[{q}]' for q in qubits)
+            if name in ('Rz', 'Rx', 'Ry'):
+                ht = _extract_halfturns(idx, nodes, rev_wire)
+                if ht is not None:
+                    import math
+                    lines.append(f'{gate}({ht * math.pi:.6f}) {q_str};')
+                else:
+                    lines.append(f'{gate}(param) {q_str};  // angle not statically known')
+            else:
+                lines.append(f'{gate} {q_str};')
+
+    return '\n'.join(lines)
+
+
+def _extract_halfturns(gate_idx: int, nodes: list, rev_wire: dict) -> float | None:
+    """Try to resolve a static rotation angle (half-turns) for Rz/Rx/Ry.
+
+    Port 1 of these gates carries a tket.rotation value produced by
+    from_halfturns_unchecked(float).  If that float comes from a simple
+    LoadConstant → Const chain we can read the literal value; otherwise
+    we return None and the caller emits a placeholder.
+    """
+    try:
+        rot_src = rev_wire.get((gate_idx, 1))
+        if not rot_src:
+            return None
+        rot_node = nodes[rot_src[0]]
+        if rot_node.get('name') != 'from_halfturns_unchecked':
+            return None
+        float_src = rev_wire.get((rot_src[0], 0))
+        if not float_src:
+            return None
+        float_node = nodes[float_src[0]]
+        if float_node.get('op') == 'LoadConstant':
+            const_src = rev_wire.get((float_src[0], 0))
+            if const_src:
+                return _read_float_const(nodes[const_src[0]])
+        if float_node.get('op') == 'Const':
+            return _read_float_const(float_node)
+    except Exception:
+        pass
+    return None
+
+
+def _read_float_const(node: dict) -> float | None:
+    """Extract a float64 literal from a HUGR Const node."""
+    v = node.get('v', {})
+    if not isinstance(v, dict):
+        return None
+    # {"v": "Extension", "value": {"c": "ConstF64", "v": {"value": 1.5}}}
+    if v.get('v') == 'Extension':
+        val = v.get('value', {})
+        if isinstance(val, dict) and val.get('c') == 'ConstF64':
+            inner = val.get('v', {})
+            if isinstance(inner, dict):
+                return float(inner.get('value', 0))
+    # {"v": "Sum", "vs": [{"v": "Extension", ...}]}  (Option<float64>)
+    if v.get('v') == 'Sum':
+        for item in v.get('vs', []):
+            result = _read_float_const({'v': item})
+            if result is not None:
+                return result
+    return None
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import { useRun } from '../hooks/useRun';
 import TerminalOutput from './TerminalOutput';
 import ResultsTab from './ResultsTab';
 import HugrTab from './HugrTab';
+import QasmTab from './QasmTab';
 import type { OutputTab, RunState } from '../../lib/types';
 
 const OUTPUT_PANEL_MIN = 80;
@@ -57,12 +58,13 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
     document.body.style.userSelect = 'none';
   }
 
-  // Mobile: 3 tabs as before
+  // Mobile: 4 tabs
   if (isMobile) {
     const allTabs: { id: OutputTab; label: string }[] = [
       { id: 'output',  label: 'Output'  },
       { id: 'results', label: 'Results' },
       { id: 'hugr',    label: 'HUGR'    },
+      { id: 'qasm',    label: 'QASM'    },
     ];
     return (
       <div style={{
@@ -89,16 +91,18 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
           {activeTab === 'output'  && <TerminalOutput />}
           {activeTab === 'results' && <ResultsTab />}
           {activeTab === 'hugr'    && <HugrTab key={runId} />}
+          {activeTab === 'qasm'    && <QasmTab key={runId} />}
         </div>
         <StatusBar statusInfo={statusInfo} runState={runState} />
       </div>
     );
   }
 
-  // Desktop: Results/HUGR tabs on top, Output panel fixed at bottom
+  // Desktop: Results / HUGR / QASM tabs on top, Output panel fixed at bottom
   const topTabs: { id: OutputTab; label: string }[] = [
     { id: 'results', label: 'Results' },
     { id: 'hugr',    label: 'HUGR'    },
+    { id: 'qasm',    label: 'QASM'    },
   ];
   // If activeTab is 'output' (e.g. switched from mobile), treat 'results' as selected
   const topActiveTab: OutputTab = activeTab === 'output' ? 'results' : activeTab;
@@ -132,6 +136,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {topActiveTab === 'results' && <ResultsTab />}
           {topActiveTab === 'hugr'    && <HugrTab key={runId} />}
+          {topActiveTab === 'qasm'    && <QasmTab key={runId} />}
         </div>
       </div>
 

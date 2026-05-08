@@ -64,6 +64,7 @@ class CompileSuccess(BaseModel):
     qubit_count:     int = 2
     warnings:        list[CompileWarning] = []
     compile_time_ms: int
+    qasm:            str | None = None
 
 
 # ── Simulation output ──────────────────────────────────────────────────────

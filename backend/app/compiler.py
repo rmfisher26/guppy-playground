@@ -113,6 +113,7 @@ async def compile_and_simulate(
         qubit_count=qubit_count,
         warnings=warnings,
         compile_time_ms=elapsed_ms,
+        qasm=data.get("qasm"),
     )
 
     sim_ok = SimulationResults(
