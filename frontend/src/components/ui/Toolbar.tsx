@@ -6,14 +6,14 @@ import { useMobile } from '../../lib/useMobile';
 import type { SimulatorBackend, NoiseModelKind } from '../../lib/types';
 
 export default function Toolbar() {
-  const { shots, setShots, simulator, setSimulator, noiseModel, setNoiseModel, errorRate, setErrorRate, runState, showToast } = usePlaygroundStore();
+  const { shots, setShots, simulator, setSimulator, noiseModel, setNoiseModel, errorRate, setErrorRate, guppyVersion, setGuppyVersion, availableVersions, runState, showToast } = usePlaygroundStore();
   const isMobile = useMobile();
   const { run } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
   function handleShare() {
-    const { source, shots, simulator, noiseModel, errorRate } = usePlaygroundStore.getState();
-    const url = encodeShareUrl({ source, shots, simulator, noiseModel, errorRate });
+    const { source, shots, simulator, noiseModel, errorRate, guppyVersion } = usePlaygroundStore.getState();
+    const url = encodeShareUrl({ source, shots, simulator, noiseModel, errorRate, guppyVersion });
     navigator.clipboard.writeText(url).catch(() => {});
     showToast('Link copied to clipboard');
     setTimeout(() => usePlaygroundStore.getState().hideToast(), 2200);
@@ -30,6 +30,8 @@ export default function Toolbar() {
     { value: 'stabilizer',  label: 'Stabilizer',  tag: 'Stim'  },
     { value: 'statevector', label: 'Statevector',  tag: 'QuEST' },
   ];
+
+  const versionOptions: SelectOption<string>[] = availableVersions.map(v => ({ value: v, label: v }));
 
   const shotOptions: SelectOption<number>[] = [
     { value: 256,  label: '256'  },
@@ -130,6 +132,18 @@ export default function Toolbar() {
           options={shotOptions}
           suffix="shots"
         />
+
+        {/* Version picker — only shown when multiple versions are available */}
+        {versionOptions.length > 1 && (
+          <>
+            <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
+            <CustomSelect
+              value={guppyVersion}
+              onChange={v => setGuppyVersion(v)}
+              options={versionOptions}
+            />
+          </>
+        )}
 
         {/* Desktop-only: divider + noise controls inline */}
         {!isMobile && (

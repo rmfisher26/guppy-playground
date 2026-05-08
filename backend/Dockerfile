@@ -1,3 +1,6 @@
+# ── uv binary ──────────────────────────────────────────────────────────────
+FROM ghcr.io/astral-sh/uv:latest AS uv
+
 # ── Build stage ────────────────────────────────────────────────────────────
 FROM python:3.11-slim AS builder
 
@@ -16,6 +19,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
+
+# uv — used to spin up isolated guppylang version environments on demand
+COPY --from=uv /uv /usr/local/bin/uv
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local

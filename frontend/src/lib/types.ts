@@ -12,6 +12,7 @@ export interface RunRequest {
   seed?: number;
   noise_model?: NoiseModelKind;
   error_rate?: number;
+  version?: string;             // guppylang version; omit for server default
 }
 
 export interface HugrNode {
@@ -88,6 +89,11 @@ export interface Example {
 
 export interface ExamplesResponse {
   examples: Example[];
+}
+
+export interface VersionsResponse {
+  versions: string[];
+  default_version: string;
 }
 
 export type RunState =

@@ -16,9 +16,10 @@ async def run_endpoint(req: RunRequest, http_req: Request) -> RunResponse:
     source_preview = req.source[:60].replace("\n", " ").strip()
 
     logger.info(
-        "[%s] POST /run  simulator=%s  shots=%d  noise=%s  p=%s  source=%r",
+        "[%s] POST /run  simulator=%s  shots=%d  noise=%s  p=%s  version=%s  source=%r",
         request_id, req.simulator, req.shots,
         req.noise_model or "ideal", req.error_rate if req.noise_model else "-",
+        req.version or "default",
         source_preview,
     )
 
@@ -31,6 +32,7 @@ async def run_endpoint(req: RunRequest, http_req: Request) -> RunResponse:
         filename=req.filename,
         noise_model=req.noise_model,
         error_rate=req.error_rate,
+        version=req.version,
     )
 
     if isinstance(result, list):

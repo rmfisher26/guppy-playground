@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePlaygroundStore } from '../lib/store';
-import { fetchExamples, decodeShareUrl } from '../lib/api';
+import { fetchExamples, fetchVersions, decodeShareUrl } from '../lib/api';
 import { FALLBACK_EXAMPLES } from '../lib/examples';
 import { DEFAULT_SOURCE } from '../lib/defaultSource';
 import { useMobile } from '../lib/useMobile';
@@ -17,7 +17,7 @@ const SIDEBAR_W_CLOSED = 32;
 const DIVIDER_W = 5;
 
 export default function Playground() {
-  const { setExamples, setActiveSlot, setSource, setModified, setShots, setSimulator, setNoiseModel, setErrorRate } = usePlaygroundStore();
+  const { setExamples, setActiveSlot, setSource, setModified, setShots, setSimulator, setNoiseModel, setErrorRate, setGuppyVersion, setAvailableVersions } = usePlaygroundStore();
   const isMobile = useMobile();
 
   // Desktop resize state
@@ -114,6 +114,14 @@ export default function Playground() {
     }
     fetchExamples()
       .then(res => setExamples(res.examples))
+      .catch(() => {});
+
+    fetchVersions()
+      .then(res => {
+        setAvailableVersions(res.versions, res.default_version);
+        const shared = decodeShareUrl();
+        if (shared?.guppyVersion) setGuppyVersion(shared.guppyVersion);
+      })
       .catch(() => {});
   }, []);
 

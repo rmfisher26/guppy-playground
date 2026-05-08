@@ -204,6 +204,7 @@ function TabButton({
 }
 
 function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof getStatusInfo>; runState: RunState }) {
+  const { guppyVersion } = usePlaygroundStore();
   const [elapsedS, setElapsedS] = React.useState(0);
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
@@ -243,7 +244,7 @@ function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof get
         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.8'; }}
       >
-        guppylang 0.21.11
+        guppylang {guppyVersion || '…'}
       </a>
     </div>
   );
