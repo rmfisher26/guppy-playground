@@ -57,7 +57,10 @@ export function useRun() {
 
       if (response.status === 'ok') {
         setRunState({ status: 'success', response, elapsed_ms });
-        setActiveTab('results');
+        const hasStateSnapshots =
+          (response.results?.state_snapshots?.length ?? 0) > 0 &&
+          (response.results?.state_snapshots?.[0]?.length ?? 0) > 0;
+        setActiveTab(hasStateSnapshots ? 'state' : 'results');
       } else if (response.status === 'compile_error') {
         setRunState({ status: 'compile_error', errors: response.errors ?? [] });
         setActiveTab('output');

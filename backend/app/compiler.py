@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .models import (
     CompileError, CompileSuccess, CompileWarning,
-    ErrorKind, HugrNode, SimulationResults,
+    ErrorKind, HugrNode, SimulationResults, StateSnapshot, StateTracedState,
 )
 from .sandbox import run_subprocess
 
@@ -115,11 +115,34 @@ async def compile_and_simulate(
         compile_time_ms=elapsed_ms,
     )
 
+    raw_snaps = data.get("state_snapshots")
+    state_snapshots = None
+    if raw_snaps:
+        state_snapshots = [
+            [
+                StateSnapshot(
+                    tag=snap["tag"],
+                    num_qubits=snap["num_qubits"],
+                    specified_qubits=snap["specified_qubits"],
+                    distribution=[
+                        StateTracedState(
+                            probability=entry["probability"],
+                            amplitudes=entry["amplitudes"],
+                        )
+                        for entry in snap["distribution"]
+                    ],
+                )
+                for snap in shot
+            ]
+            for shot in raw_snaps
+        ]
+
     sim_ok = SimulationResults(
         counts=data.get("counts", {}),
         noisy_counts=data.get("noisy_counts"),
         register_names=data.get("register_names"),
         simulate_time_ms=elapsed_ms,
+        state_snapshots=state_snapshots,
     )
 
     return compile_ok, sim_ok

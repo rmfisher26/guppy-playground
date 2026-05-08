@@ -185,4 +185,35 @@ def main() -> None:
 
 main.check()`,
   },
+  {
+    id: 'state-debug',
+    title: 'State Snapshots',
+    description: "Use state_result() to inspect the quantum state mid-circuit. Guppy's equivalent of print() debugging.",
+    tags: ['debugging', 'statevector'],
+    group: 'Debugging',
+    qubit_count: 2,
+    default_shots: 256,
+    source: `from guppylang import guppy
+from guppylang.std.quantum import qubit, h, cx, measure
+from guppylang.std.debug import state_result
+from guppylang.std.builtins import result as guppy_result
+
+@guppy
+def main() -> None:
+    q0 = qubit()
+    q1 = qubit()
+
+    state_result("initial", q0, q1)   # |00⟩
+
+    h(q0)
+    state_result("after_h", q0, q1)   # |+0⟩ = (|00⟩ + |10⟩)/√2
+
+    cx(q0, q1)
+    state_result("bell", q0, q1)      # (|00⟩ + |11⟩)/√2
+
+    guppy_result("m0", measure(q0))
+    guppy_result("m1", measure(q1))
+
+main.check()`,
+  },
 ];
