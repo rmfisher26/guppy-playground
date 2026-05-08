@@ -117,6 +117,17 @@ export default function Toolbar() {
 
         <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
 
+        {/* Version picker — only shown when multiple versions are available */}
+        {versionOptions.length > 1 && (
+          <CustomSelect
+            value={guppyVersion}
+            onChange={v => setGuppyVersion(v)}
+            options={versionOptions}
+          />
+        )}
+
+        <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
+
         {/* Simulator */}
         <CustomSelect
           value={simulator}
@@ -132,18 +143,6 @@ export default function Toolbar() {
           options={shotOptions}
           suffix="shots"
         />
-
-        {/* Version picker — only shown when multiple versions are available */}
-        {versionOptions.length > 1 && (
-          <>
-            <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
-            <CustomSelect
-              value={guppyVersion}
-              onChange={v => setGuppyVersion(v)}
-              options={versionOptions}
-            />
-          </>
-        )}
 
         {/* Desktop-only: divider + noise controls inline */}
         {!isMobile && (
