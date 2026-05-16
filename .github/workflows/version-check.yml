@@ -39,19 +39,27 @@ jobs:
           from packaging.version import Version
           data = json.loads(urllib.request.urlopen("https://pypi.org/pypi/guppylang/json").read())
           all_versions = sorted(data["releases"].keys(), key=Version, reverse=True)
-          latest = all_versions[:10]
-          already_tested = [v for v in latest if v in COMPATIBLE_VERSIONS]
-          to_check = [v for v in latest if v not in COMPATIBLE_VERSIONS]
 
-          print(f"Latest 10 on PyPI:      {', '.join(latest)}")
-          print(f"Already tested (skip):  {', '.join(already_tested) or 'none'}")
-          print(f"Will check:             {', '.join(to_check) or 'none'}")
+          # Keep only the latest patch for each minor version, top 3 minors
+          by_minor = {}
+          for v in all_versions:
+              p = Version(v)
+              key = (p.major, p.minor)
+              if key not in by_minor:
+                  by_minor[key] = v
+          top_minors = sorted(by_minor.keys(), reverse=True)[:3]
+          candidates = [by_minor[k] for k in top_minors]
+
+          already_tested = [v for v in candidates if v in COMPATIBLE_VERSIONS]
+          to_check = [v for v in candidates if v not in COMPATIBLE_VERSIONS]
+
+          print(f"Top 3 minors (latest patch each): {', '.join(candidates)}")
+          print(f"Already tested (skip):            {', '.join(already_tested) or 'none'}")
+          print(f"Will check:                       {', '.join(to_check) or 'none'}")
           print(flush=True)
 
           new_pairs = {}
           for guppy_ver in to_check:
-              if guppy_ver in COMPATIBLE_VERSIONS:
-                  continue
               result = subprocess.run(
                   ["uv", "pip", "compile", "--no-header", "-"],
                   input=f"guppylang=={guppy_ver}\nselene-sim\n",
@@ -102,34 +110,55 @@ jobs:
         run: |
           python - << 'EOF'
           import json, re
+          import sys
+          from packaging.version import Version
+
+          sys.path.insert(0, "backend")
+          from app.config import COMPATIBLE_VERSIONS
 
           tested = json.loads(open("tested_pairs.json").read())
           passing = {v: d for v, d in tested.items() if d["passed"]}
 
-          if not passing:
-              print("No new pairs passed tests — nothing to commit.")
+          # Merge existing + newly passing
+          merged = {
+              **{v: {"selene_sim": info["selene_sim"], "tested": True} for v, info in COMPATIBLE_VERSIONS.items()},
+              **{v: {"selene_sim": d["selene_sim"],   "tested": True} for v, d   in passing.items()},
+          }
+
+          # Keep only the latest patch per minor, top 3 minors
+          by_minor = {}
+          for v, info in merged.items():
+              p = Version(v)
+              key = (p.major, p.minor)
+              if key not in by_minor or Version(v) > Version(by_minor[key][0]):
+                  by_minor[key] = (v, info)
+          top_minors = sorted(by_minor.keys(), reverse=True)[:3]
+          pruned = dict(sorted(
+              {by_minor[k][0]: by_minor[k][1] for k in top_minors}.items(),
+              key=lambda x: Version(x[0]), reverse=True
+          ))
+
+          if pruned == {v: {"selene_sim": info["selene_sim"], "tested": info["tested"]} for v, info in COMPATIBLE_VERSIONS.items()}:
+              print("Config already up to date — nothing to commit.")
               open(".patch_needed", "w").write("false")
               raise SystemExit(0)
 
           config_path = "backend/app/config.py"
           src = open(config_path).read()
 
-          # Build new entries to insert before the closing brace of COMPATIBLE_VERSIONS
           new_lines = "\n".join(
-              f'    "{v}":  {{"selene_sim": "{d["selene_sim"]}", "tested": True}},'
-              for v, d in sorted(passing.items(), reverse=True)
+              f'    "{v}": {{"selene_sim": "{info["selene_sim"]}", "tested": True}},'
+              for v, info in pruned.items()
           )
-
-          # Insert before the last closing brace of the dict literal
           patched = re.sub(
-              r'(COMPATIBLE_VERSIONS: dict\[str, dict\] = \{.*?)(\})',
-              lambda m: m.group(1) + new_lines + "\n" + m.group(2),
+              r'(COMPATIBLE_VERSIONS: dict\[str, dict\] = \{).*?(\})',
+              lambda m: m.group(1) + "\n" + new_lines + "\n" + m.group(2),
               src, flags=re.DOTALL
           )
 
           open(config_path, "w").write(patched)
           open(".patch_needed", "w").write("true")
-          print(f"Added {len(passing)} new version(s): {', '.join(passing)}")
+          print(f"Config updated. Versions kept: {', '.join(pruned)}")
           EOF
 
       - name: Open PR if config changed
