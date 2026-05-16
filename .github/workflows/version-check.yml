@@ -28,7 +28,7 @@ jobs:
         id: discover
         run: |
           python - << 'EOF'
-          import json, subprocess, sys
+          import json, subprocess, sys, re
 
           # Read current tested map from config
           sys.path.insert(0, "backend")
@@ -53,22 +53,17 @@ jobs:
               if guppy_ver in COMPATIBLE_VERSIONS:
                   continue
               result = subprocess.run(
-                  ["pip", "install", "--dry-run", "--report", "-",
-                   f"guppylang=={guppy_ver}", "selene-sim"],
+                  ["uv", "pip", "compile", "--no-header", "-"],
+                  input=f"guppylang=={guppy_ver}\nselene-sim\n",
                   capture_output=True, text=True
               )
               if result.returncode != 0:
                   print(f"  {guppy_ver}: no compatible selene-sim found", flush=True)
                   continue
-              report = json.loads(result.stdout)
-              selene_pkg = next(
-                  (p for p in report.get("install", [])
-                   if p["metadata"]["name"].lower().replace("-", "_") == "selene_sim"),
-                  None
-              )
-              if not selene_pkg:
+              m = re.search(r"^selene[_-]sim==(\S+)", result.stdout, re.MULTILINE | re.IGNORECASE)
+              if not m:
                   continue
-              selene_ver = selene_pkg["metadata"]["version"]
+              selene_ver = m.group(1)
               print(f"  {guppy_ver} → selene-sim=={selene_ver}", flush=True)
               new_pairs[guppy_ver] = selene_ver
 
