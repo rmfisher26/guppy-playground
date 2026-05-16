@@ -58,10 +58,12 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
     document.body.style.userSelect = 'none';
   }
 
+  const { source } = usePlaygroundStore();
   const hasStateSnapshots =
     runState.status === 'success' &&
     (runState.response.results?.state_snapshots?.length ?? 0) > 0 &&
     (runState.response.results?.state_snapshots?.[0]?.length ?? 0) > 0;
+  const showStateDot = hasStateSnapshots || /\bstate_result\s*\(/.test(source);
 
   // Mobile: 4 tabs
   if (isMobile) {
@@ -89,7 +91,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
               label={tab.label}
               active={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              dot={tab.id === 'state' && hasStateSnapshots}
+              dot={tab.id === 'state' && showStateDot}
             />
           ))}
         </div>
@@ -136,7 +138,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
               label={tab.label}
               active={topActiveTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              dot={tab.id === 'state' && hasStateSnapshots}
+              dot={tab.id === 'state' && showStateDot}
             />
           ))}
         </div>

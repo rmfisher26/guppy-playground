@@ -108,7 +108,7 @@ export type RunState =
   | { status: 'preparing' }
   | { status: 'compiling' }
   | { status: 'simulating' }
-  | { status: 'success'; response: RunResponse; elapsed_ms: number }
+  | { status: 'success'; response: RunResponse; elapsed_ms: number; simulator: SimulatorBackend }
   | { status: 'compile_error'; errors: CompileError[] }
   | { status: 'timeout' }
   | { status: 'rate_limited'; retry_after_ms: number }

@@ -3,7 +3,7 @@ import { usePlaygroundStore } from '../../lib/store';
 import type { RunState } from '../../lib/types';
 
 export default function TerminalOutput() {
-  const { runState } = usePlaygroundStore();
+  const { runState, simulator, source } = usePlaygroundStore();
   return (
     <div style={{
       flex: 1, padding: 16, fontFamily: 'var(--font-mono)',
@@ -15,12 +15,20 @@ export default function TerminalOutput() {
       '--text-muted':     '#6e7681',
       '--border':         '#30363d',
     } as React.CSSProperties}>
-      <TerminalContent state={runState} />
+      <TerminalContent state={runState} simulator={simulator} source={source} />
     </div>
   );
 }
 
-function TerminalContent({ state }: { state: RunState }) {
+function TerminalContent({ state, simulator, source }: { state: RunState; simulator: 'stabilizer' | 'statevector'; source: string }) {
+  // For a completed run, use the simulator that produced the results — not the currently-selected one.
+  const effectiveSim = state.status === 'success' ? state.simulator : simulator;
+  const simLabel = effectiveSim === 'statevector' ? 'Statevector' : 'Stabilizer';
+  // True when state_result() caused the simulator to be promoted to Statevector automatically
+  const autoStatevector = state.status === 'success'
+    && state.simulator === 'statevector'
+    && /\bstate_result\s*\(/.test(source);
+
   if (state.status === 'idle') {
     return <Line color="var(--text-muted)">Press ▶ Run or Ctrl+Enter to compile and simulate</Line>;
   }
@@ -30,7 +38,7 @@ function TerminalContent({ state }: { state: RunState }) {
       <>
         <Line color="var(--teal)">Compiling…</Line>
         <Blank />
-        <Line color="var(--text-muted)">  guppylang → HUGR IR → selene-sim</Line>
+        <Line color="var(--text-muted)">  guppylang → HUGR IR → selene-sim [{simLabel}]</Line>
         <Blank />
         <SpinnerLine label="Type checking" />
       </>
@@ -44,7 +52,7 @@ function TerminalContent({ state }: { state: RunState }) {
         <Line color="var(--green)">✓ Linearity check passed</Line>
         <Line color="var(--green)">✓ HUGR compiled</Line>
         <Blank />
-        <SpinnerLine label="Running Selene…" />
+        <SpinnerLine label={`Running Selene [${simLabel}]…`} />
       </>
     );
   }
@@ -52,9 +60,15 @@ function TerminalContent({ state }: { state: RunState }) {
   if (state.status === 'success') {
     const { response, elapsed_ms } = state;
     const compile = response.compile;
+    const shotCount = response.results
+      ? Object.values(response.results.counts).reduce((a, b) => a + b, 0).toLocaleString()
+      : '—';
     return (
       <>
-        <Line color="var(--text-muted)">  guppylang {compile ? `→ HUGR IR (${compile.node_count} nodes) → selene-sim` : '→ selene-sim'}</Line>
+        <Line color="var(--text-muted)">  guppylang {compile ? `→ HUGR IR (${compile.node_count} nodes) → selene-sim` : '→ selene-sim'} [{simLabel}]</Line>
+        {autoStatevector && (
+          <Line color="var(--teal)">  ℹ state_result() detected — Statevector enabled automatically</Line>
+        )}
         <Blank />
         {compile?.warnings.map((w, i) => (
           <Line key={i} color="var(--yellow)">⚠ line {w.line}: {w.message}</Line>
@@ -63,7 +77,7 @@ function TerminalContent({ state }: { state: RunState }) {
         <Line color="var(--green)">✓ Linearity check passed — no qubit leaks</Line>
         {compile && <Line color="var(--green)">✓ Compiled to HUGR ({compile.node_count} nodes)</Line>}
         <Blank />
-        <Line color="var(--teal)">Running {response.results ? Object.values(response.results.counts).reduce((a,b)=>a+b,0).toLocaleString() : '—'} shots…</Line>
+        <Line color="var(--teal)">Running {shotCount} shots · {simLabel}…</Line>
         <Blank />
         <Line color="var(--green)">✓ Simulation complete</Line>
         <Blank />
