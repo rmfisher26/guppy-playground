@@ -19,6 +19,7 @@ import sys
 import time
 from pathlib import Path
 
+from .config import COMPATIBLE_VERSIONS, DEFAULT_VERSION, SUPPORTED_VERSIONS
 from .models import (
     CompileError, CompileSuccess, CompileWarning,
     ErrorKind, HugrNode, SimulationResults,
@@ -27,6 +28,23 @@ from .sandbox import run_subprocess
 
 WORKER = Path(__file__).parent / "_compile_worker.py"
 TIMEOUT = 60  # compile + simulate together; give generous budget
+
+
+def _worker_command(version: str | None) -> list[str]:
+    """Return the subprocess command for the given guppylang version.
+
+    Uses the current venv's interpreter for the default version (fast path),
+    and uv to spin up an isolated environment for alternate versions.
+    """
+    if version is None or version == DEFAULT_VERSION:
+        return [sys.executable, str(WORKER)]
+    selene_ver = COMPATIBLE_VERSIONS[version]["selene_sim"]
+    return [
+        "uv", "run",
+        "--with", f"guppylang=={version}",
+        "--with", f"selene-sim=={selene_ver}",
+        str(WORKER),
+    ]
 
 
 async def compile_and_simulate(
@@ -38,6 +56,7 @@ async def compile_and_simulate(
     filename: str = "main.py",
     noise_model: str | None = None,
     error_rate: float = 0.001,
+    version: str | None = None,
 ) -> tuple[CompileSuccess, SimulationResults] | list[CompileError]:
     """Compile and simulate a Guppy program in one sandboxed subprocess.
 
@@ -50,15 +69,23 @@ async def compile_and_simulate(
         filename:    Filename reported in compile error messages.
         noise_model: Noise model kind ("depolarizing") or None for ideal simulation.
         error_rate:  Per-gate error probability for the noise model.
+        version:     guppylang version string (e.g. "0.21.11"), or None for default.
 
     Returns:
         ``(CompileSuccess, SimulationResults)`` on success, or
         ``list[CompileError]`` if compilation or simulation fails.
     """
+    if version is not None and version not in SUPPORTED_VERSIONS:
+        return [CompileError(
+            message=f"Unsupported guppylang version: {version!r}",
+            line=1,
+            kind=ErrorKind.internal_error,
+        )]
+
     t0 = time.monotonic()
 
     result = await run_subprocess(
-        [sys.executable, str(WORKER)],
+        _worker_command(version),
         input_data=json.dumps({
             "source":      source,
             "filename":    filename,
@@ -67,6 +94,7 @@ async def compile_and_simulate(
             "seed":        seed,
             "noise_model": noise_model,
             "error_rate":  error_rate,
+            "version":     version,
         }),
         timeout=TIMEOUT,
     )

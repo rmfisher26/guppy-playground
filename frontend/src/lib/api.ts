@@ -1,4 +1,4 @@
-import type { RunRequest, RunResponse, HealthResponse, ExamplesResponse, SimulatorBackend, NoiseModelKind } from './types';
+import type { RunRequest, RunResponse, HealthResponse, ExamplesResponse, VersionsResponse, SimulatorBackend, NoiseModelKind } from './types';
 
 export type ShareConfig = {
   source: string;
@@ -6,6 +6,7 @@ export type ShareConfig = {
   simulator: SimulatorBackend;
   noiseModel: NoiseModelKind | null;
   errorRate: number;
+  guppyVersion?: string;
 };
 
 const BASE_URL = import.meta.env.PUBLIC_API_URL ?? '/api';
@@ -49,6 +50,11 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>('/health');
 }
 
+// GET /versions
+export async function fetchVersions(): Promise<VersionsResponse> {
+  return request<VersionsResponse>('/versions');
+}
+
 // Encode the full run config into URL hash for share links
 export function encodeShareUrl(config: ShareConfig): string {
   const encoded = btoa(encodeURIComponent(JSON.stringify(config)));
@@ -76,3 +82,4 @@ export function decodeShareUrl(): ShareConfig | null {
     return null;
   }
 }
+

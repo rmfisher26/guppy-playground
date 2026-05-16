@@ -406,6 +406,70 @@ def test_run_register_names_present_in_noisy_run():
         assert data["results"]["noisy_counts"] is not None
 
 
+# ── Versions ───────────────────────────────────────────────────────────────
+
+def test_versions_returns_200():
+    resp = client.get("/versions")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "versions" in data
+    assert "default_version" in data
+    assert "version_deps" in data
+    assert isinstance(data["versions"], list)
+    assert len(data["versions"]) > 0
+
+
+def test_versions_only_includes_tested():
+    from app.config import COMPATIBLE_VERSIONS
+    expected = sorted(v for v, d in COMPATIBLE_VERSIONS.items() if d["tested"])
+    resp = client.get("/versions")
+    assert sorted(resp.json()["versions"]) == expected
+
+
+def test_versions_default_is_in_list():
+    from app.config import DEFAULT_VERSION
+    resp = client.get("/versions")
+    data = resp.json()
+    assert data["default_version"] == DEFAULT_VERSION
+    assert DEFAULT_VERSION in data["versions"]
+
+
+def test_versions_deps_covers_all_returned_versions():
+    resp = client.get("/versions")
+    data = resp.json()
+    for v in data["versions"]:
+        assert v in data["version_deps"], f"version_deps missing entry for {v}"
+        assert data["version_deps"][v], f"version_deps[{v}] is empty"
+
+
+def test_run_unknown_version_returns_compile_error():
+    resp = client.post("/run", json={
+        "source":    "x",
+        "shots":     64,
+        "simulator": "stabilizer",
+        "version":   "0.0.0.not.real",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "compile_error"
+    assert any(
+        "unsupported" in e["message"].lower() or "version" in e["message"].lower()
+        for e in data["errors"]
+    )
+
+
+def test_run_default_version_explicit_does_not_500():
+    from app.config import DEFAULT_VERSION
+    resp = client.post("/run", json={
+        "source":    "this is not valid python @@@@",
+        "shots":     64,
+        "simulator": "stabilizer",
+        "version":   DEFAULT_VERSION,
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] in ("ok", "compile_error", "internal_error")
+
+
 # ── CORS ───────────────────────────────────────────────────────────────────
 
 def test_cors_header_on_run():
