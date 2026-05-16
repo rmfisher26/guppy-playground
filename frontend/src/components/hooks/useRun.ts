@@ -30,7 +30,7 @@ export function useRun() {
   }, []);
 
   async function run() {
-    const { source, shots, simulator, seed, noiseModel, errorRate, activeSlot, examples, setRunState, setActiveTab } =
+    const { source, shots, simulator, seed, noiseModel, errorRate, activeSlot, examples, setRunState, setActiveTab, setSimulator } =
       usePlaygroundStore.getState();
 
     const isRunning = ['compiling', 'simulating', 'preparing'].includes(store.runState.status);
@@ -49,6 +49,7 @@ export function useRun() {
     setActiveTab('output');
 
     const effectiveSimulator = /\bstate_result\s*\(/.test(source) ? 'statevector' : simulator;
+    if (effectiveSimulator !== simulator) setSimulator(effectiveSimulator);
 
     try {
       const response = await apiRun({
