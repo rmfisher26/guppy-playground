@@ -36,8 +36,9 @@ jobs:
 
           # Fetch all guppylang releases from PyPI
           import urllib.request
+          from packaging.version import Version
           data = json.loads(urllib.request.urlopen("https://pypi.org/pypi/guppylang/json").read())
-          all_versions = sorted(data["releases"].keys(), reverse=True)
+          all_versions = sorted(data["releases"].keys(), key=Version, reverse=True)
           latest = all_versions[:10]
           already_tested = [v for v in latest if v in COMPATIBLE_VERSIONS]
           to_check = [v for v in latest if v not in COMPATIBLE_VERSIONS]
