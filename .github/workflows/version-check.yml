@@ -38,9 +38,17 @@ jobs:
           import urllib.request
           data = json.loads(urllib.request.urlopen("https://pypi.org/pypi/guppylang/json").read())
           all_versions = sorted(data["releases"].keys(), reverse=True)
+          latest = all_versions[:10]
+          already_tested = [v for v in latest if v in COMPATIBLE_VERSIONS]
+          to_check = [v for v in latest if v not in COMPATIBLE_VERSIONS]
+
+          print(f"Latest 10 on PyPI:      {', '.join(latest)}")
+          print(f"Already tested (skip):  {', '.join(already_tested) or 'none'}")
+          print(f"Will check:             {', '.join(to_check) or 'none'}")
+          print(flush=True)
 
           new_pairs = {}
-          for guppy_ver in all_versions[:10]:   # check latest 10 releases
+          for guppy_ver in to_check:
               if guppy_ver in COMPATIBLE_VERSIONS:
                   continue
               result = subprocess.run(
