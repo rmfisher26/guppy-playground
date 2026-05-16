@@ -68,7 +68,8 @@ jobs:
           gcloud run deploy ${{ env.SERVICE }} \
             --image ${{ env.IMAGE }} \
             --region ${{ env.REGION }} \
-            --platform managed
+            --platform managed \
+            --memory 2Gi
 
       - name: Print service URL
         run: |
