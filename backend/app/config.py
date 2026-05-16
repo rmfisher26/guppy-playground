@@ -17,7 +17,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #
 # The first entry is the default shown on page load.
 COMPATIBLE_VERSIONS: dict[str, dict] = {
-    "0.21.11": {"selene_sim": "0.2.13", "tested": True},
+    "0.21.11": {"selene_sim": "0.2.13", "tested": True    "0.21.9":  {"selene_sim": "0.2.15", "tested": True},
+    "0.21.8":  {"selene_sim": "0.2.15", "tested": True},
+    "0.21.7":  {"selene_sim": "0.2.15", "tested": True},
+    "0.21.6":  {"selene_sim": "0.2.15", "tested": True},
+    "0.21.5":  {"selene_sim": "0.2.13", "tested": True},
+    "0.21.14":  {"selene_sim": "0.2.15", "tested": True},
+    "0.21.13":  {"selene_sim": "0.2.15", "tested": True},
+    "0.21.10":  {"selene_sim": "0.2.15", "tested": True},
+},
     "0.21.0":  {"selene_sim": "0.2.13", "tested": True},
 }
 
