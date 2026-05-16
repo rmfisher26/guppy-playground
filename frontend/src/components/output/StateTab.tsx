@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
 import type { StateSnapshot, StateTracedState } from '../../lib/types';
 
@@ -22,18 +22,17 @@ export default function StateTab() {
   }
 
   return (
-    <div style={{
-      flex: 1, overflow: 'auto', padding: 16,
-      display: 'flex', flexDirection: 'column', gap: 12,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-          {snapshots.length} state snapshot{snapshots.length !== 1 ? 's' : ''} · shot 0
-        </span>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+            {snapshots.length} state snapshot{snapshots.length !== 1 ? 's' : ''} · shot 0
+          </span>
+        </div>
+        {snapshots.map((snap, i) => (
+          <SnapshotCard key={`${snap.tag}-${i}`} snapshot={snap} index={i} />
+        ))}
       </div>
-      {snapshots.map((snap, i) => (
-        <SnapshotCard key={`${snap.tag}-${i}`} snapshot={snap} index={i} />
-      ))}
     </div>
   );
 }
@@ -108,6 +107,7 @@ function SnapshotCard({ snapshot, index }: { snapshot: StateSnapshot; index: num
 // ── Pure state — equation hero + detail rows ──────────────────────────────
 
 function PureStateBody({ amplitudes, n }: { amplitudes: [number, number][]; n: number }) {
+  const [open, setOpen] = useState(true);
   const probs = amplitudes.map(([re, im]) => re * re + im * im);
   const nonZeroCount = probs.filter(p => p > 1e-9).length;
 
@@ -128,13 +128,14 @@ function PureStateBody({ amplitudes, n }: { amplitudes: [number, number][]; n: n
         <StateEquation amplitudes={amplitudes} n={n} />
       </div>
 
-      {/* Zone 2: Detail rows — exact amplitudes and probabilities */}
-      <div style={{
-        borderTop: '1px solid var(--border)',
-        background: 'var(--bg-raised)',
-        padding: '8px 12px 10px',
-      }}>
-        <BasisRows amplitudes={amplitudes} n={n} probs={probs} />
+      {/* Zone 2: Detail rows — collapsible */}
+      <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-raised)' }}>
+        <AmplitudeToggle open={open} onToggle={() => setOpen((o: boolean) => !o)} />
+        {open && (
+          <div style={{ padding: '2px 12px 10px' }}>
+            <BasisRows amplitudes={amplitudes} n={n} probs={probs} />
+          </div>
+        )}
       </div>
     </>
   );
@@ -146,36 +147,41 @@ function MixedStateBody({ distribution, n }: { distribution: StateTracedState[];
   return (
     <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {distribution.map((branch, bi) => (
-        <div key={bi} style={{
-          border: '1px solid var(--border)',
-          borderLeft: '3px solid var(--amber, #f59e0b)',
-          borderRadius: 'var(--radius-sm)',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            padding: '4px 10px',
-            background: 'color-mix(in srgb, #f59e0b 6%, var(--bg-surface))',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            color: 'var(--amber, #f59e0b)',
-          }}>
-            p = {(branch.probability * 100).toFixed(1)}%
-          </div>
-          <div style={{ padding: '10px 10px 8px' }}>
-            <StateEquation amplitudes={branch.amplitudes} n={n} />
-          </div>
-          <div style={{
-            borderTop: '1px solid var(--border)',
-            background: 'var(--bg-raised)',
-            padding: '6px 10px 8px',
-          }}>
-            <BasisRows
-              amplitudes={branch.amplitudes}
-              n={n}
-              probs={branch.amplitudes.map(([re, im]) => re * re + im * im)}
-            />
-          </div>
-        </div>
+        <BranchCard key={bi} branch={branch} n={n} />
       ))}
+    </div>
+  );
+}
+
+function BranchCard({ branch, n }: { branch: StateTracedState; n: number }) {
+  const [open, setOpen] = useState(true);
+  const probs = branch.amplitudes.map(([re, im]: [number, number]) => re * re + im * im);
+  return (
+    <div style={{
+      border: '1px solid var(--border)',
+      borderLeft: '3px solid var(--amber, #f59e0b)',
+      borderRadius: 'var(--radius-sm)',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '4px 10px',
+        background: 'color-mix(in srgb, #f59e0b 6%, var(--bg-surface))',
+        fontFamily: 'var(--font-mono)', fontSize: 11,
+        color: 'var(--amber, #f59e0b)',
+      }}>
+        p = {(branch.probability * 100).toFixed(1)}%
+      </div>
+      <div style={{ padding: '10px 10px 8px' }}>
+        <StateEquation amplitudes={branch.amplitudes} n={n} />
+      </div>
+      <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-raised)' }}>
+        <AmplitudeToggle open={open} onToggle={() => setOpen((o: boolean) => !o)} />
+        {open && (
+          <div style={{ padding: '2px 10px 8px' }}>
+            <BasisRows amplitudes={branch.amplitudes} n={n} probs={probs} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -237,6 +243,29 @@ function StateEquation({ amplitudes, n }: { amplitudes: [number, number][]; n: n
   );
 }
 
+// ── Amplitude section toggle ──────────────────────────────────────────────
+
+function AmplitudeToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 5,
+        padding: '4px 12px', background: 'none', border: 'none',
+        cursor: 'pointer', color: 'var(--text-muted)',
+        fontFamily: 'var(--font-ui)', fontSize: 10,
+      }}
+    >
+      <span style={{
+        display: 'inline-block', fontSize: 8,
+        transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+        transition: 'transform 0.15s',
+      }}>▶</span>
+      amplitudes
+    </button>
+  );
+}
+
 // ── Detail rows ───────────────────────────────────────────────────────────
 
 function BasisRows({
@@ -244,7 +273,6 @@ function BasisRows({
 }: {
   amplitudes: [number, number][]; n: number; probs: number[];
 }) {
-  const maxProb = Math.max(...probs, 1e-12);
   const nonZeroCount = probs.filter(p => p > 1e-9).length;
   const showAll = (1 << n) <= 8;
 
@@ -259,7 +287,6 @@ function BasisRows({
           key={idx}
           basis={idx.toString(2).padStart(n, '0')}
           prob={prob}
-          maxProb={maxProb}
           re={re}
           im={im}
           dim={prob < 1e-9}
@@ -277,11 +304,11 @@ function BasisRows({
 // ── Single basis-state row ────────────────────────────────────────────────
 
 function BasisRow({
-  basis, prob, maxProb, re, im, dim,
+  basis, prob, re, im, dim,
 }: {
-  basis: string; prob: number; maxProb: number; re: number; im: number; dim: boolean;
+  basis: string; prob: number; re: number; im: number; dim: boolean;
 }) {
-  const pct = (prob / maxProb) * 100;
+  const pct = prob * 100;
   const label = formatAmplitude(re, im);
 
   return (
