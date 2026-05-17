@@ -30,7 +30,7 @@ export function useRun() {
   }, []);
 
   async function run() {
-    const { source, shots, simulator, seed, noiseModel, errorRate, guppyVersion, activeSlot, examples, setRunState, setActiveTab } =
+    const { source, shots, simulator, seed, noiseModel, errorRate, guppyVersion, activeSlot, examples, setRunState, setActiveTab, setSimulator } =
       usePlaygroundStore.getState();
 
     const isRunning = ['compiling', 'simulating', 'preparing'].includes(store.runState.status);
