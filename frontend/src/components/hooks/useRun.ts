@@ -48,17 +48,24 @@ export function useRun() {
     setRunState({ status: 'compiling' });
     setActiveTab('output');
 
+    const effectiveSimulator = /\bstate_result\s*\(/.test(source) ? 'statevector' : simulator;
+    if (effectiveSimulator !== simulator) setSimulator(effectiveSimulator);
+
     try {
       const response = await apiRun({
-        source, filename, shots, simulator, seed,
+        source, filename, shots, simulator: effectiveSimulator, seed,
         ...(noiseModel ? { noise_model: noiseModel, error_rate: errorRate } : {}),
         ...(guppyVersion ? { version: guppyVersion } : {}),
       });
       const elapsed_ms = Math.round(performance.now() - start);
 
       if (response.status === 'ok') {
-        setRunState({ status: 'success', response, elapsed_ms });
-        setActiveTab('results');
+        setRunState({ status: 'success', response, elapsed_ms, simulator: effectiveSimulator });
+        const hasStateSnapshots =
+          (response.results?.state_snapshots?.length ?? 0) > 0 &&
+          (response.results?.state_snapshots?.[0]?.length ?? 0) > 0;
+        const sourceUsesStateResult = /\bstate_result\s*\(/.test(source);
+        setActiveTab((hasStateSnapshots || sourceUsesStateResult) ? 'state' : 'results');
       } else if (response.status === 'compile_error') {
         setRunState({ status: 'compile_error', errors: response.errors ?? [] });
         setActiveTab('output');

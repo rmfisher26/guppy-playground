@@ -185,4 +185,250 @@ def main() -> None:
 
 main.check()`,
   },
+  {
+    id: 'state-debug',
+    title: 'Bell Pair Inspection',
+    description: "Use state_result() to inspect the quantum state mid-circuit. Guppy's equivalent of print() debugging.",
+    tags: ['debugging', 'statevector'],
+    group: 'Debugging',
+    qubit_count: 2,
+    default_shots: 256,
+    source: `from guppylang import guppy
+from guppylang.std.quantum import qubit, h, cx, measure
+from guppylang.std.debug import state_result
+from guppylang.std.builtins import result as guppy_result
+
+@guppy
+def main() -> None:
+    """Bell pair preparation with state snapshots.
+
+    Walks through the two-gate sequence that creates a Bell state,
+    capturing the wavefunction after each step so you can see superposition
+    and entanglement appear one gate at a time.
+
+    Switch to Statevector simulator to see the State tab.
+    """
+    q0 = qubit()
+    q1 = qubit()
+
+    state_result("1. initial", q0, q1)       # |00⟩ — both qubits in ground state
+
+    # H puts q0 into equal superposition
+    h(q0)
+    state_result("2. after H", q0, q1)       # (|00⟩ + |10⟩)/√2 — q0 in |+⟩, q1 still |0⟩
+
+    # CNOT entangles q0 and q1 — creates the Bell state
+    cx(q0, q1)
+    state_result("3. Bell state", q0, q1)    # (|00⟩ + |11⟩)/√2 — maximally entangled
+
+    guppy_result("m0", measure(q0))
+    guppy_result("m1", measure(q1))
+
+main.check()`,
+  },
+  {
+    id: 'teleport-debug',
+    title: 'Quantum Teleportation Inspection',
+    description: 'Watch entanglement build and collapse during quantum teleportation using state_result() snapshots at each stage.',
+    tags: ['debugging', 'teleportation', 'statevector', 'intermediate'],
+    group: 'Debugging',
+    qubit_count: 3,
+    default_shots: 256,
+    source: `from guppylang import guppy
+from guppylang.std.builtins import owned, result
+from guppylang.std.quantum import cx, h, measure, qubit, x, z
+from guppylang.std.debug import state_result
+
+@guppy
+def main() -> None:
+    """Quantum teleportation with state inspection.
+
+    Teleports src (prepared in |+>) to tgt using an entangled ancilla tmp.
+    state_result() snapshots the full 3-qubit wavefunction at each stage,
+    letting you watch entanglement build and collapse through the protocol.
+
+    Switch to Statevector simulator to see the State tab.
+    """
+    src = qubit()   # qubit to teleport — prepared in |+>
+    tmp = qubit()   # ancilla — entangled with tgt to form the Bell channel
+    tgt = qubit()   # destination qubit
+
+    # Prepare src in |+> = (|0> + |1>)/sqrt(2)
+    h(src)
+    state_result("1. src in |+>", src, tmp, tgt)
+
+    # Entangle tmp and tgt — creates the Bell channel
+    h(tmp)
+    cx(tmp, tgt)
+    state_result("2. Bell channel ready", src, tmp, tgt)
+
+    # Joint Bell measurement on src and tmp
+    cx(src, tmp)
+    h(src)
+    state_result("3. Before measurement", src, tmp, tgt)
+
+    # Mid-circuit measurement — wavefunction collapses here
+    m_src = measure(src)
+    m_tmp = measure(tmp)
+
+    # Classical feedforward corrections on tgt
+    if m_tmp:
+        x(tgt)
+    if m_src:
+        z(tgt)
+
+    # tgt now holds the teleported |+> state
+    state_result("4. After correction (tgt only)", tgt)
+    result("tgt", measure(tgt))
+
+main.check()`,
+  },
+  {
+    id: 'ghz-debug',
+    title: 'GHZ State Inspection',
+    description: 'Watch 3-qubit GHZ entanglement spread step by step using state_result() as each CNOT is applied.',
+    tags: ['debugging', 'entanglement', 'statevector', 'intermediate'],
+    group: 'Debugging',
+    qubit_count: 3,
+    default_shots: 256,
+    source: `from guppylang import guppy
+from guppylang.std.quantum import qubit, h, cx, measure
+from guppylang.std.debug import state_result
+from guppylang.std.builtins import result
+
+@guppy
+def main() -> None:
+    """GHZ state preparation with state snapshots.
+
+    Watch entanglement spread qubit by qubit as each CNOT is applied,
+    building the 3-qubit GHZ state (|000> + |111>)/sqrt(2).
+
+    Switch to Statevector simulator to see the State tab.
+    """
+    q0 = qubit()
+    q1 = qubit()
+    q2 = qubit()
+
+    state_result("1. initial", q0, q1, q2)            # |000>
+
+    h(q0)
+    state_result("2. after H on q0", q0, q1, q2)      # (|000> + |100>)/sqrt(2)
+
+    cx(q0, q1)
+    state_result("3. after cx(q0,q1)", q0, q1, q2)    # (|000> + |110>)/sqrt(2)
+
+    cx(q1, q2)
+    state_result("4. GHZ ready", q0, q1, q2)          # (|000> + |111>)/sqrt(2)
+
+    result("q0", measure(q0))
+    result("q1", measure(q1))
+    result("q2", measure(q2))
+
+main.check()`,
+  },
+  {
+    id: 'deutsch-debug',
+    title: 'Deutsch Algorithm Inspection',
+    description: 'See phase kickback in action — watch how the oracle encodes f(x) as a global phase and the final H converts it to a measurable bit.',
+    tags: ['debugging', 'algorithm', 'statevector', 'intermediate'],
+    group: 'Debugging',
+    qubit_count: 2,
+    default_shots: 256,
+    source: `from guppylang import guppy
+from guppylang.std.quantum import qubit, h, cx, x, measure
+from guppylang.std.debug import state_result
+from guppylang.std.builtins import result
+
+@guppy
+def main() -> None:
+    """Deutsch algorithm with state snapshots.
+
+    Watch how the balanced oracle encodes f(x) as a global phase via
+    kickback, and how the final Hadamard converts that into a measurable bit.
+
+    Switch to Statevector simulator to see the State tab.
+    """
+    q   = qubit()
+    anc = qubit()
+
+    state_result("1. initial", q, anc)           # |00>
+
+    h(q)
+    x(anc)
+    h(anc)
+    state_result("2. |+-> prepared", q, anc)     # query register in |+->
+
+    # Balanced oracle: f(x) = x
+    cx(q, anc)
+    state_result("3. after oracle", q, anc)      # phase kickback applied
+
+    h(q)
+    state_result("4. after final H", q, anc)     # q collapses to |1> — balanced
+
+    result("result", measure(q))
+    result("anc", measure(anc))
+
+main.check()`,
+  },
+  {
+    id: 'qec-debug',
+    title: 'Bit Flip Code Inspection',
+    description: 'Watch the QEC cycle: encode a logical qubit, inject an error, measure syndromes, and verify the corrected state with state_result().',
+    tags: ['debugging', 'error-correction', 'statevector', 'advanced'],
+    group: 'Debugging',
+    qubit_count: 5,
+    default_shots: 256,
+    source: `from guppylang import guppy
+from guppylang.std.quantum import qubit, cx, x, measure
+from guppylang.std.debug import state_result
+from guppylang.std.builtins import result
+
+@guppy
+def main() -> None:
+    """3-qubit bit-flip code with state snapshots.
+
+    Watch the logical |0> get encoded across three physical qubits,
+    a bit-flip error get injected, syndromes measured, and the state restored.
+
+    Switch to Statevector simulator to see the State tab.
+    """
+    q0 = qubit()
+    q1 = qubit()
+    q2 = qubit()
+
+    state_result("1. initial |000>", q0, q1, q2)
+
+    # Encode logical |0> -> |000>
+    cx(q0, q1)
+    cx(q0, q2)
+    state_result("2. encoded |000>", q0, q1, q2)
+
+    # Inject a bit-flip error on q1
+    x(q1)
+    state_result("3. after error on q1", q0, q1, q2)
+
+    # Syndrome measurement via ancilla qubits
+    anc0 = qubit()
+    anc1 = qubit()
+    cx(q0, anc0); cx(q1, anc0)
+    cx(q1, anc1); cx(q2, anc1)
+    s0 = measure(anc0)
+    s1 = measure(anc1)
+
+    # Correction
+    if s0 and not s1:
+        x(q0)
+    if s0 and s1:
+        x(q1)
+    if not s0 and s1:
+        x(q2)
+
+    state_result("4. after correction", q0, q1, q2)
+
+    result("q0", measure(q0))
+    result("q1", measure(q1))
+    result("q2", measure(q2))
+
+main.check()`,
+  },
 ];

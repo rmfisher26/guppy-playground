@@ -48,6 +48,18 @@ export interface CompileError {
   kind: ErrorKind;
 }
 
+export interface StateTracedState {
+  probability: number;
+  amplitudes: [number, number][];   // [re, im] per basis state
+}
+
+export interface StateSnapshot {
+  tag: string;
+  num_qubits: number;               // total qubits in full system
+  specified_qubits: number[];       // which qubits this call captured
+  distribution: StateTracedState[]; // usually 1 entry for pure states
+}
+
 export interface SimulationResults {
   counts: Record<string, number>;
   noisy_counts?: Record<string, number>;
@@ -55,6 +67,7 @@ export interface SimulationResults {
   expectation_values?: Record<string, number>;
   statevector?: Array<{ amplitude: [number, number]; basis: string }>;
   simulate_time_ms: number;
+  state_snapshots?: StateSnapshot[][];  // [shot][call-order]
 }
 
 export type RunStatus = 'ok' | 'compile_error' | 'timeout' | 'rate_limited' | 'internal_error';
@@ -102,10 +115,10 @@ export type RunState =
   | { status: 'preparing' }
   | { status: 'compiling' }
   | { status: 'simulating' }
-  | { status: 'success'; response: RunResponse; elapsed_ms: number }
+  | { status: 'success'; response: RunResponse; elapsed_ms: number; simulator: SimulatorBackend }
   | { status: 'compile_error'; errors: CompileError[] }
   | { status: 'timeout' }
   | { status: 'rate_limited'; retry_after_ms: number }
   | { status: 'internal_error'; message: string };
 
-export type OutputTab = 'output' | 'results' | 'hugr';
+export type OutputTab = 'output' | 'results' | 'state' | 'hugr';

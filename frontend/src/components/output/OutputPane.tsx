@@ -3,6 +3,7 @@ import { usePlaygroundStore } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import TerminalOutput from './TerminalOutput';
 import ResultsTab from './ResultsTab';
+import StateTab from './StateTab';
 import HugrTab from './HugrTab';
 import type { OutputTab, RunState } from '../../lib/types';
 
@@ -57,11 +58,19 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
     document.body.style.userSelect = 'none';
   }
 
-  // Mobile: 3 tabs as before
+  const { source } = usePlaygroundStore();
+  const hasStateSnapshots =
+    runState.status === 'success' &&
+    (runState.response.results?.state_snapshots?.length ?? 0) > 0 &&
+    (runState.response.results?.state_snapshots?.[0]?.length ?? 0) > 0;
+  const showStateDot = hasStateSnapshots || /\bstate_result\s*\(/.test(source);
+
+  // Mobile: 4 tabs
   if (isMobile) {
     const allTabs: { id: OutputTab; label: string }[] = [
       { id: 'output',  label: 'Output'  },
       { id: 'results', label: 'Results' },
+      { id: 'state',   label: 'State'   },
       { id: 'hugr',    label: 'HUGR'    },
     ];
     return (
@@ -82,12 +91,14 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
               label={tab.label}
               active={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
+              dot={tab.id === 'state' && showStateDot}
             />
           ))}
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {activeTab === 'output'  && <TerminalOutput />}
           {activeTab === 'results' && <ResultsTab />}
+          {activeTab === 'state'   && <StateTab />}
           {activeTab === 'hugr'    && <HugrTab key={runId} />}
         </div>
         <StatusBar statusInfo={statusInfo} runState={runState} />
@@ -95,12 +106,13 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
     );
   }
 
-  // Desktop: Results/HUGR tabs on top, Output panel fixed at bottom
+  // Desktop: Results / State / HUGR tabs on top, Output panel fixed at bottom
   const topTabs: { id: OutputTab; label: string }[] = [
     { id: 'results', label: 'Results' },
+    { id: 'state',   label: 'State'   },
     { id: 'hugr',    label: 'HUGR'    },
   ];
-  // If activeTab is 'output' (e.g. switched from mobile), treat 'results' as selected
+  // If activeTab is 'output' (switched from mobile), fall back to 'results'
   const topActiveTab: OutputTab = activeTab === 'output' ? 'results' : activeTab;
 
   const splitHighlighted = splitDividerActive || splitDividerHovered;
@@ -126,11 +138,13 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
               label={tab.label}
               active={topActiveTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
+              dot={tab.id === 'state' && showStateDot}
             />
           ))}
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {topActiveTab === 'results' && <ResultsTab />}
+          {topActiveTab === 'state'   && <StateTab />}
           {topActiveTab === 'hugr'    && <HugrTab key={runId} />}
         </div>
       </div>
@@ -171,9 +185,9 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
 }
 
 function TabButton({
-  label, active, onClick, asLabel,
+  label, active, onClick, asLabel, dot,
 }: {
-  label: string; active: boolean; onClick: () => void; asLabel?: boolean;
+  label: string; active: boolean; onClick: () => void; asLabel?: boolean; dot?: boolean;
 }) {
   const [hovered, setHovered] = React.useState(false);
   return (
@@ -196,9 +210,17 @@ function TabButton({
         cursor: asLabel ? 'default' : 'pointer',
         transition: 'color 0.15s',
         whiteSpace: 'nowrap',
+        display: 'inline-flex', alignItems: 'center', gap: 5,
       }}
     >
       {label}
+      {dot && (
+        <span style={{
+          width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+          background: active ? 'var(--teal)' : 'var(--text-muted)',
+          transition: 'background 0.15s',
+        }} />
+      )}
     </button>
   );
 }

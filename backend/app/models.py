@@ -69,11 +69,24 @@ class CompileSuccess(BaseModel):
 
 # ── Simulation output ──────────────────────────────────────────────────────
 
+class StateTracedState(BaseModel):
+    probability: float
+    amplitudes:  list[list[float]]   # [[re, im], ...] — one entry per basis state
+
+
+class StateSnapshot(BaseModel):
+    tag:               str
+    num_qubits:        int            # total qubits in the full system
+    specified_qubits:  list[int]      # indices of qubits captured by this call
+    distribution:      list[StateTracedState]
+
+
 class SimulationResults(BaseModel):
     counts:           dict[str, int]
     noisy_counts:     dict[str, int] | None = None
     register_names:   list[str] | None = None
     simulate_time_ms: int
+    state_snapshots:  list[list[StateSnapshot]] | None = None  # [shot][call-order]
 
 
 # ── Run response ───────────────────────────────────────────────────────────

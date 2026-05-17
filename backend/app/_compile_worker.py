@@ -166,6 +166,26 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         except Exception:
             pass  # if noisy sim fails, return ideal counts only
 
+    # State snapshots — extract state_result() calls if present in source
+    state_snapshots: list[list[dict]] | None = None
+    if re.search(r'\bstate_result\s*\(', source):
+        try:
+            if simulator == "statevector":
+                # Already have a statevector result — extract directly
+                state_snapshots = _extract_state_snapshots(result)
+            elif n_qubits <= MAX_QUBITS_STATEVECTOR:
+                # Stabilizer was used for counts; run 1-shot statevector pass for states
+                sv_em = (
+                    guppy_fn.emulator(n_qubits=n_qubits)
+                    .with_shots(1)
+                    .statevector_sim()
+                )
+                if seed is not None:
+                    sv_em = sv_em.with_seed(seed)
+                state_snapshots = _extract_state_snapshots(sv_em.run())
+        except Exception:
+            pass
+
     print(json.dumps({
         "status":          "ok",
         "counts":          counts,
@@ -175,6 +195,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         "hugr_json":       hugr_json,
         "warnings":        [],
         "qubit_count":     n_qubits,
+        "state_snapshots": state_snapshots,
     }))
 
 
@@ -186,6 +207,8 @@ def _flatten_counts(result) -> dict[str, int]:
     for shot in result.results:
         parts = []
         for _, v in shot.entries:
+            if isinstance(v, str):
+                continue  # state_result() stores artifact file paths — skip them
             if isinstance(v, list):
                 parts.append("".join(str(int(b)) for b in v))
             else:
@@ -206,7 +229,10 @@ def _extract_register_names(result) -> list[str] | None:
     """
     if not result.results:
         return None
-    reg_bits = result.results[0].to_register_bits()
+    try:
+        reg_bits = result.results[0].to_register_bits()
+    except Exception:
+        return None  # state_result() artifact paths confuse to_register_bits()
     if not reg_bits:
         return None
     names: list[str] = []
@@ -219,6 +245,45 @@ def _extract_register_names(result) -> list[str] | None:
     if all(re.fullmatch(r"\d+", n.split("[")[0]) for n in names):
         return None
     return names or None
+
+
+def _extract_state_snapshots(result) -> list[list[dict]] | None:
+    """Serialize state_result() snapshots from shot 0 into JSON-safe dicts.
+
+    Returns [[{tag, num_qubits, specified_qubits, distribution}, ...]] (one outer
+    list per captured shot, currently always length 1) or None if no snapshots.
+    """
+    try:
+        partial_states = result.partial_states()   # list[list[tuple[str, PartialVector]]]
+        if not partial_states:
+            return None
+        all_shots: list[list[dict]] = []
+        for shot_states in partial_states[:1]:     # only shot 0 for display
+            shot_snaps: list[dict] = []
+            for tag, pv in shot_states:
+                n_specified = len(pv.specified_qubits)
+                if n_specified > 8:                # 2^8 = 256 amplitudes max
+                    continue
+                try:
+                    distribution = [
+                        {
+                            "probability": float(ts.probability),
+                            "amplitudes":  [[float(c.real), float(c.imag)] for c in ts.state],
+                        }
+                        for ts in pv.state_distribution()
+                    ]
+                    shot_snaps.append({
+                        "tag":              tag,
+                        "num_qubits":       pv.total_qubits,
+                        "specified_qubits": list(pv.specified_qubits),
+                        "distribution":     distribution,
+                    })
+                except Exception:
+                    pass
+            all_shots.append(shot_snaps)
+        return all_shots if any(s for s in all_shots) else None
+    except Exception:
+        return None
 
 
 # ── Error rendering ────────────────────────────────────────────────────────
