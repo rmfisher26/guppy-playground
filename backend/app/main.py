@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
-from .routes import run, health, examples
+from .routes import run, health, examples, versions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +37,7 @@ app.add_middleware(
 # ── Routes ────────────────────────────────────────────────────────────────
 app.include_router(run.router,      tags=["execution"])
 app.include_router(health.router,   tags=["meta"])
+app.include_router(versions.router, tags=["meta"])
 app.include_router(examples.router, tags=["content"])
 
 

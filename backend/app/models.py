@@ -23,6 +23,7 @@ class RunRequest(BaseModel):
     seed:        int | None = None
     noise_model: NoiseModelKind | None = None
     error_rate:  float = Field(0.001, ge=0.0, le=1.0)
+    version:     str | None = None       # guppylang version; None → server default
 
 
 # ── Compile output ─────────────────────────────────────────────────────────
@@ -130,3 +131,11 @@ class HealthResponse(BaseModel):
     guppylang_version: str
     selene_version:    str
     uptime_seconds:    float
+
+
+# ── Versions ───────────────────────────────────────────────────────────────
+
+class VersionsResponse(BaseModel):
+    versions:        list[str]
+    default_version: str
+    version_deps:    dict[str, str]  # guppy version → selene-sim version

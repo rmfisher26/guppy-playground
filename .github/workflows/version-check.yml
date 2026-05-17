@@ -1,0 +1,200 @@
+name: Weekly version check
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # every Monday 09:00 UTC
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv + test deps
+        run: |
+          pip install uv
+          pip install -r backend/requirements.txt
+
+      - name: Discover compatible version pairs
+        id: discover
+        run: |
+          python - << 'EOF'
+          import json, subprocess, sys, re
+
+          # Read current tested map from config
+          sys.path.insert(0, "backend")
+          from app.config import COMPATIBLE_VERSIONS
+
+          # Fetch all guppylang releases from PyPI
+          import urllib.request
+          from packaging.version import Version
+          data = json.loads(urllib.request.urlopen("https://pypi.org/pypi/guppylang/json").read())
+          all_versions = sorted(data["releases"].keys(), key=Version, reverse=True)
+
+          # Keep only the latest patch for each minor version, top 3 minors
+          by_minor = {}
+          for v in all_versions:
+              p = Version(v)
+              key = (p.major, p.minor)
+              if key not in by_minor:
+                  by_minor[key] = v
+          top_minors = sorted(by_minor.keys(), reverse=True)[:3]
+          candidates = [by_minor[k] for k in top_minors]
+
+          already_tested = [v for v in candidates if v in COMPATIBLE_VERSIONS]
+          to_check = [v for v in candidates if v not in COMPATIBLE_VERSIONS]
+
+          print(f"Top 3 minors (latest patch each): {', '.join(candidates)}")
+          print(f"Already tested (skip):            {', '.join(already_tested) or 'none'}")
+          print(f"Will check:                       {', '.join(to_check) or 'none'}")
+          print(flush=True)
+
+          new_pairs = {}
+          for guppy_ver in to_check:
+              result = subprocess.run(
+                  ["uv", "pip", "compile", "--no-header", "-"],
+                  input=f"guppylang=={guppy_ver}\nselene-sim\n",
+                  capture_output=True, text=True
+              )
+              if result.returncode != 0:
+                  print(f"  {guppy_ver}: no compatible selene-sim found", flush=True)
+                  continue
+              m = re.search(r"^selene[_-]sim==(\S+)", result.stdout, re.MULTILINE | re.IGNORECASE)
+              if not m:
+                  continue
+              selene_ver = m.group(1)
+              print(f"  {guppy_ver} → selene-sim=={selene_ver}", flush=True)
+              new_pairs[guppy_ver] = selene_ver
+
+          if not new_pairs:
+              print("No new compatible pairs found.")
+              open("new_pairs.json", "w").write("{}")
+          else:
+              open("new_pairs.json", "w").write(json.dumps(new_pairs, indent=2))
+          EOF
+
+      - name: Run tests against each new pair
+        run: |
+          python - << 'EOF'
+          import json, subprocess, sys
+
+          new_pairs = json.loads(open("new_pairs.json").read())
+          tested = {}
+
+          for guppy_ver, selene_ver in new_pairs.items():
+              print(f"\n=== Testing guppylang=={guppy_ver} + selene-sim=={selene_ver} ===", flush=True)
+              result = subprocess.run(
+                  ["uv", "run",
+                   "--with", f"guppylang=={guppy_ver}",
+                   "--with", f"selene-sim=={selene_ver}",
+                   "pytest", "backend/tests/", "-v", "--tb=short", "-q"],
+                  capture_output=False
+              )
+              tested[guppy_ver] = {"selene_sim": selene_ver, "passed": result.returncode == 0}
+              print(f"  → {'PASS' if result.returncode == 0 else 'FAIL'}", flush=True)
+
+          open("tested_pairs.json", "w").write(json.dumps(tested, indent=2))
+          EOF
+
+      - name: Update config.py with passing pairs
+        id: patch
+        run: |
+          python - << 'EOF'
+          import json, re
+          import sys
+          from packaging.version import Version
+
+          sys.path.insert(0, "backend")
+          from app.config import COMPATIBLE_VERSIONS
+
+          tested = json.loads(open("tested_pairs.json").read())
+          passing = {v: d for v, d in tested.items() if d["passed"]}
+
+          # Merge existing + newly passing
+          merged = {
+              **{v: {"selene_sim": info["selene_sim"], "tested": True} for v, info in COMPATIBLE_VERSIONS.items()},
+              **{v: {"selene_sim": d["selene_sim"],   "tested": True} for v, d   in passing.items()},
+          }
+
+          # Keep only the latest patch per minor, top 3 minors
+          by_minor = {}
+          for v, info in merged.items():
+              p = Version(v)
+              key = (p.major, p.minor)
+              if key not in by_minor or Version(v) > Version(by_minor[key][0]):
+                  by_minor[key] = (v, info)
+          top_minors = sorted(by_minor.keys(), reverse=True)[:3]
+          pruned = dict(sorted(
+              {by_minor[k][0]: by_minor[k][1] for k in top_minors}.items(),
+              key=lambda x: Version(x[0]), reverse=True
+          ))
+
+          if pruned == {v: {"selene_sim": info["selene_sim"], "tested": info["tested"]} for v, info in COMPATIBLE_VERSIONS.items()}:
+              print("Config already up to date — nothing to commit.")
+              open(".patch_needed", "w").write("false")
+              raise SystemExit(0)
+
+          config_path = "backend/app/config.py"
+          src = open(config_path).read()
+
+          new_lines = "\n".join(
+              f'    "{v}": {{"selene_sim": "{info["selene_sim"]}", "tested": True}},'
+              for v, info in pruned.items()
+          )
+          patched = re.sub(
+              r'(COMPATIBLE_VERSIONS: dict\[str, dict\] = \{).*?(\})',
+              lambda m: m.group(1) + "\n" + new_lines + "\n" + m.group(2),
+              src, flags=re.DOTALL
+          )
+
+          open(config_path, "w").write(patched)
+          open(".patch_needed", "w").write("true")
+          print(f"Config updated. Versions kept: {', '.join(pruned)}")
+          EOF
+
+      - name: Open PR if config changed
+        if: ${{ hashFiles('.patch_needed') != '' }}
+        run: |
+          NEEDED=$(cat .patch_needed)
+          if [ "$NEEDED" != "true" ]; then exit 0; fi
+
+          NEW_VERSIONS=$(python -c "
+          import json
+          d = json.loads(open('tested_pairs.json').read())
+          print(', '.join(v for v, info in d.items() if info['passed']))
+          ")
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="auto/guppy-versions-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add backend/app/config.py
+          git commit -m "chore: add tested guppylang versions $NEW_VERSIONS"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "chore: add tested guppylang versions ($NEW_VERSIONS)" \
+            --body "$(cat << 'BODY'
+          Auto-discovered by the weekly version-check workflow.
+
+          Each new version was tested by running \`pytest backend/tests/\` against the resolved \`guppylang + selene-sim\` pair. Only versions where all tests passed are included.
+
+          **Checklist before merging:**
+          - [ ] Verify the new version(s) work end-to-end in the playground UI
+          - [ ] Mark any version as \`"tested": False\` if you want to exclude it from the picker for now
+          BODY
+          )" \
+            --base main \
+            --head "$BRANCH"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -49,6 +49,11 @@ interface PlaygroundStore {
   setNoiseModel: (m: NoiseModelKind | null) => void;
   errorRate: number;
   setErrorRate: (r: number) => void;
+  guppyVersion: string;
+  setGuppyVersion: (v: string) => void;
+  availableVersions: string[];
+  versionDeps: Record<string, string>;
+  setAvailableVersions: (versions: string[], defaultVersion: string, deps: Record<string, string>) => void;
 
   // Active slot — 'workspace' or an example id
   activeSlot: ActiveSlot;
@@ -107,6 +112,12 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   setNoiseModel: (noiseModel) => set({ noiseModel }),
   errorRate: 0.001,
   setErrorRate: (errorRate) => set({ errorRate }),
+  guppyVersion: '',
+  setGuppyVersion: (guppyVersion) => set({ guppyVersion }),
+  availableVersions: [],
+  versionDeps: {},
+  setAvailableVersions: (versions, defaultVersion, deps) =>
+    set((s) => ({ availableVersions: versions, versionDeps: deps, guppyVersion: s.guppyVersion || defaultVersion })),
 
   activeSlot: 'workspace',
   setActiveSlot: (activeSlot) => set({ activeSlot }),

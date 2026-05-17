@@ -226,6 +226,8 @@ function TabButton({
 }
 
 function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof getStatusInfo>; runState: RunState }) {
+  const { guppyVersion, versionDeps } = usePlaygroundStore();
+  const seleneVersion = guppyVersion ? versionDeps[guppyVersion] : undefined;
   const [elapsedS, setElapsedS] = React.useState(0);
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
 
@@ -261,12 +263,27 @@ function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof get
         href="https://github.com/Quantinuum/guppylang"
         target="_blank"
         rel="noreferrer"
-        style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--teal)', borderLeft: '1px solid var(--border)', paddingLeft: 8, textDecoration: 'none', opacity: 0.8 }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.8'; }}
+        style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)', borderLeft: '1px solid var(--border)', paddingLeft: 8, textDecoration: 'none', transition: 'color 0.15s' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--teal)'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}
       >
-        guppylang 0.21.11
+        guppylang {guppyVersion || '…'}
       </a>
+      {seleneVersion && (
+        <>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--border-bright)' }}>·</span>
+          <a
+            href="https://github.com/Quantinuum/selene"
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)', textDecoration: 'none', transition: 'color 0.15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--teal)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}
+          >
+            selene {seleneVersion}
+          </a>
+        </>
+      )}
     </div>
   );
 }
