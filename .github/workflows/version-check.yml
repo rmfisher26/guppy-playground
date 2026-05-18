@@ -151,8 +151,8 @@ jobs:
               for v, info in pruned.items()
           )
           patched = re.sub(
-              r'(COMPATIBLE_VERSIONS: dict\[str, dict\] = \{).*?(\})',
-              lambda m: m.group(1) + "\n" + new_lines + "\n" + m.group(2),
+              r'(COMPATIBLE_VERSIONS: dict\[str, dict\] = \{).*?(\n\})',
+              lambda m: m.group(1) + "\n" + new_lines + m.group(2),
               src, flags=re.DOTALL
           )
 
