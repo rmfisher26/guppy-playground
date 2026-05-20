@@ -546,3 +546,63 @@ def test_teleport_linearity_error_caught():
     data = resp.json()
     # Guppy should catch the linearity error (leaked qubit or unused measurement)
     assert data["status"] in ("ok", "compile_error")
+
+
+# ── coin_flip (compile() call in source) ───────────────────────────────────
+
+COIN_FLIP_SOURCE = _prog("coin_flip")
+
+
+def test_coin_flip_compile_call_detected():
+    """Source with coin_flip.compile() should auto-switch to compile-only mode."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None          # no simulation ran
+        assert data["compile"] is not None
+
+
+def test_coin_flip_stdout_captured():
+    """print() calls after compile() should appear in the response stdout field."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        stdout = data.get("stdout") or ""
+        assert "hugr.package.Package" in stdout
+        assert "HUGR package:" in stdout
+        assert "bytes" in stdout
+
+
+# ── hadamard (compile_function() call in source) ───────────────────────────
+
+HADAMARD_SOURCE = _prog("hadamard")
+
+
+def test_hadamard_compile_function_linearity_error():
+    """hadamard returns a borrowed qubit without @owned — guppy must catch this."""
+    resp = client.post("/run", json={
+        "source":    HADAMARD_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "compile_error"
+    errors = data["errors"]
+    assert errors, "expected at least one compile error"
+    msg = errors[0]["message"]
+    assert "owned" in msg.lower() or "borrow" in msg.lower(), (
+        f"Expected ownership/linearity error, got: {msg!r}"
+    )
+    assert errors[0]["kind"] == "linearity_error"

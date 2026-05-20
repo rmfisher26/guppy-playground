@@ -48,6 +48,12 @@ def main() -> None:
     source_config = _parse_emulator_config(source)
     import_source = _strip_emulator_calls(source) if source_config else source
 
+    # fn.compile() / fn.compile_function() in module scope → compile-only.
+    # Unlike emulator calls, we do NOT strip these — they produce a Package object
+    # that subsequent print() calls may reference, and the stdout is captured.
+    if not compile_only and _parse_compile_call(source):
+        compile_only = True
+
     # importlib requires a real file path, and guppylang reads the source file
     # directly to build error spans — exec(source) would lose that information.
     tmpfile = tempfile.NamedTemporaryFile(
@@ -137,25 +143,21 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         raise ValueError(f"{n_qubits} qubits exceeds playground limit of {MAX_QUBITS_STABILIZER}.")
 
     # Compile HUGR for display panel.
-    # compile() requires the entry point to be named 'main'; for any other
-    # function (e.g. a subroutine with qubit params) fall back to regex-inferred
-    # nodes rather than letting guppylang raise "Module entrypoint must have a
-    # single function named main".
+    # Functions with parameters (qubit or otherwise) must use compile_function();
+    # parameter-free functions (entrypoints) use compile().
     hugr_nodes: list[dict] = []
     hugr_json: dict | None = None
-    if guppy_fn_name == "main":
+    fn_has_params = _fn_has_any_params(source, guppy_fn_name or "")
+    try:
+        pkg = guppy_fn.compile_function() if fn_has_params else guppy_fn.compile()
+        hugr_str = pkg.to_str()
         try:
-            pkg = guppy_fn.compile()
-            hugr_str = pkg.to_str()
-            try:
-                json_start = hugr_str.index('{')
-                hugr_json = json.loads(hugr_str[json_start:])
-            except (ValueError, json.JSONDecodeError):
-                pass
-            hugr_nodes = _extract_nodes(hugr_str)
-        except Exception:
-            hugr_nodes = _infer_nodes(source)
-    else:
+            json_start = hugr_str.index('{')
+            hugr_json = json.loads(hugr_str[json_start:])
+        except (ValueError, json.JSONDecodeError):
+            pass
+        hugr_nodes = _extract_nodes(hugr_str)
+    except Exception:
         hugr_nodes = _infer_nodes(source)
 
     if compile_only:
@@ -485,6 +487,46 @@ def _infer_qubit_count(source: str) -> int:
     individual = len(re.findall(r'\bqubit\(\)', stripped))
     param_qubits = len(re.findall(r':\s*qubit\b', source))
     return max(individual + array_total + param_qubits, 2)
+
+
+def _fn_has_any_params(source: str, fn_name: str) -> bool:
+    """Return True if the named function has any parameters at all."""
+    if not fn_name:
+        return False
+    try:
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == fn_name:
+                return bool(node.args.args)
+    except (SyntaxError, AttributeError):
+        pass
+    return False
+
+
+def _parse_compile_call(source: str) -> bool:
+    """Return True if source has a module-level .compile() or .compile_function() call.
+
+    Detects patterns like:
+        pkg = my_fn.compile()
+        pkg = my_fn.compile_function()
+        my_fn.compile()
+
+    Does not match calls inside function or class bodies.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Expr)):
+            continue
+        for child in ast.walk(node):
+            if (isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Attribute)
+                    and child.func.attr in ("compile", "compile_function")
+                    and isinstance(child.func.value, ast.Name)):
+                return True
+    return False
 
 
 def _has_qubit_params(source: str, fn_name: str) -> bool:
