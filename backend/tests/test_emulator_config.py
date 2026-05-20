@@ -5,7 +5,10 @@ import os
 
 # Make the worker importable without installing guppylang.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from app._compile_worker import _parse_emulator_config, _strip_emulator_calls
+from app._compile_worker import (
+    _parse_emulator_config, _strip_emulator_calls,
+    _has_qubit_params, _infer_qubit_count,
+)
 
 
 # ── _parse_emulator_config ─────────────────────────────────────────────────
@@ -147,3 +150,43 @@ def test_strip_no_emulator_unchanged():
 def test_strip_syntax_error_returns_original():
     src = "this is @@@ not valid"
     assert _strip_emulator_calls(src) == src
+
+
+# ── _has_qubit_params ──────────────────────────────────────────────────────
+
+TELEPORT_SRC = """\
+from guppylang import guppy
+from guppylang.std.builtins import owned
+from guppylang.std.quantum import qubit
+
+@guppy
+def teleport(src: qubit @ owned, tgt: qubit) -> None:
+    tmp = qubit()
+"""
+
+def test_has_qubit_params_detects_qubit_args():
+    assert _has_qubit_params(TELEPORT_SRC, "teleport") is True
+
+def test_has_qubit_params_ignores_no_qubit_params():
+    src = "@guppy\ndef main() -> None:\n    q = qubit()\n"
+    assert _has_qubit_params(src, "main") is False
+
+def test_has_qubit_params_unknown_fn_returns_false():
+    assert _has_qubit_params(TELEPORT_SRC, "nonexistent") is False
+
+def test_has_qubit_params_syntax_error_returns_false():
+    assert _has_qubit_params("this is @@@", "teleport") is False
+
+
+# ── _infer_qubit_count (param-aware) ──────────────────────────────────────
+
+def test_infer_counts_qubit_params():
+    # 2 params (src, tgt) + 1 internal qubit() = 3
+    assert _infer_qubit_count(TELEPORT_SRC) == 3
+
+def test_infer_no_params_still_works():
+    src = "def main():\n    q0 = qubit()\n    q1 = qubit()\n"
+    assert _infer_qubit_count(src) == 2
+
+def test_infer_falls_back_to_minimum_two():
+    assert _infer_qubit_count("x = 1") == 2

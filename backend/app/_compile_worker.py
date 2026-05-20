@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import io
 import json
 import os
 import re
@@ -42,6 +43,8 @@ def main() -> None:
 
     # Extract emulator config written inline in the source (e.g. main.emulator(1).run())
     # and strip those calls before importing to avoid double-execution.
+    compile_only: bool      = bool(payload.get("compile_only", False))
+
     source_config = _parse_emulator_config(source)
     import_source = _strip_emulator_calls(source) if source_config else source
 
@@ -51,13 +54,14 @@ def main() -> None:
         suffix=".py", mode="w", delete=False, prefix="guppy_user_"
     )
     tmppath = tmpfile.name
+    stdout_holder: list[str | None] = [None]  # populated by _run after exec_module
     try:
         tmpfile.write(import_source)
         tmpfile.close()
-        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate, source_config)
+        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate, source_config, compile_only, stdout_holder)
     except Exception as exc:
         errors = _parse_error(exc, source, traceback.format_exc(), filename)
-        print(json.dumps({"status": "error", "errors": errors}))
+        print(json.dumps({"status": "error", "errors": errors, "stdout": stdout_holder[0]}))
     finally:
         try:
             os.unlink(tmppath)
@@ -65,7 +69,7 @@ def main() -> None:
             pass
 
 
-def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001, source_config: dict | None = None) -> None:
+def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001, source_config: dict | None = None, compile_only: bool = False, stdout_holder: list | None = None) -> None:
     from guppylang.defs import GuppyFunctionDefinition
 
     # Code-level emulator config takes precedence over UI-supplied parameters.
@@ -79,18 +83,30 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         raise ImportError(f"Could not load {tmppath}")
 
     module = importlib.util.module_from_spec(spec)
+    # Capture user print() output so it can be forwarded to the frontend without
+    # corrupting the JSON response channel (stdout is parsed as JSON by the backend).
+    _saved_stdout = sys.stdout
+    _capture = io.StringIO()
+    sys.stdout = _capture
     try:
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     except SystemExit:
         pass  # user programs or guppylang internals may call sys.exit() at module level
+    finally:
+        sys.stdout = _saved_stdout
+    user_stdout: str | None = _capture.getvalue() or None
+    if stdout_holder is not None:
+        stdout_holder[0] = user_stdout
     # GuppyError propagates out of exec_module — let it bubble to main()
 
     # Find main() entry point first, then any other @guppy fn
     guppy_fn = None
+    guppy_fn_name: str | None = None
     for attr in ("main", *dir(module)):
         obj = getattr(module, attr, None)
         if isinstance(obj, GuppyFunctionDefinition):
             guppy_fn = obj
+            guppy_fn_name = attr
             break
 
     if guppy_fn is None:
@@ -100,8 +116,14 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
             "hugr_nodes":  _infer_nodes(source),
             "warnings":    [],
             "qubit_count": 0,
+            "stdout":      user_stdout,
         }))
         return
+
+    # Functions with qubit input parameters can't be run by the emulator without
+    # a wrapper main(). Auto-switch to compile-only so type-check programs work.
+    if not compile_only and guppy_fn_name != "main" and _has_qubit_params(source, guppy_fn_name or ""):
+        compile_only = True
 
     n_qubits = (source_config.get("n_qubits") if source_config else None) or _infer_qubit_count(source)
 
@@ -114,20 +136,42 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
     if n_qubits > MAX_QUBITS_STABILIZER:
         raise ValueError(f"{n_qubits} qubits exceeds playground limit of {MAX_QUBITS_STABILIZER}.")
 
-    # Compile HUGR for display panel
+    # Compile HUGR for display panel.
+    # compile() requires the entry point to be named 'main'; for any other
+    # function (e.g. a subroutine with qubit params) fall back to regex-inferred
+    # nodes rather than letting guppylang raise "Module entrypoint must have a
+    # single function named main".
     hugr_nodes: list[dict] = []
     hugr_json: dict | None = None
-    try:
-        pkg = guppy_fn.compile()
-        hugr_str = pkg.to_str()
+    if guppy_fn_name == "main":
         try:
-            json_start = hugr_str.index('{')
-            hugr_json = json.loads(hugr_str[json_start:])
-        except (ValueError, json.JSONDecodeError):
-            pass
-        hugr_nodes = _extract_nodes(hugr_str)
-    except Exception:
+            pkg = guppy_fn.compile()
+            hugr_str = pkg.to_str()
+            try:
+                json_start = hugr_str.index('{')
+                hugr_json = json.loads(hugr_str[json_start:])
+            except (ValueError, json.JSONDecodeError):
+                pass
+            hugr_nodes = _extract_nodes(hugr_str)
+        except Exception:
+            hugr_nodes = _infer_nodes(source)
+    else:
         hugr_nodes = _infer_nodes(source)
+
+    if compile_only:
+        print(json.dumps({
+            "status":          "ok",
+            "counts":          {},
+            "noisy_counts":    None,
+            "register_names":  None,
+            "hugr_nodes":      hugr_nodes,
+            "hugr_json":       hugr_json,
+            "warnings":        [],
+            "qubit_count":     n_qubits,
+            "state_snapshots": None,
+            "stdout":          user_stdout,
+        }))
+        return
 
     # Simulate
     emulator = guppy_fn.emulator(n_qubits=n_qubits).with_shots(shots)
@@ -208,6 +252,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         "warnings":        [],
         "qubit_count":     n_qubits,
         "state_snapshots": state_snapshots,
+        "stdout":          user_stdout,
     }))
 
 
@@ -432,12 +477,30 @@ def _render_plain_error(exc: Exception, tb_str: str) -> dict:
 def _infer_qubit_count(source: str) -> int:
     # Count array(qubit() for _ in range(n)) comprehensions specifically,
     # then count remaining bare qubit() calls outside those patterns.
+    # Also count qubit-typed function parameters (e.g. src: qubit @ owned).
     # Falls back to 2 so the emulator always gets a valid circuit width.
     array_pat = r'array\s*\(\s*qubit\s*\(\s*\)\s+for\s+\w+\s+in\s+range\s*\(\s*(\d+)\s*\)\s*\)'
     array_total = sum(int(m) for m in re.findall(array_pat, source))
     stripped = re.sub(array_pat, '', source)
     individual = len(re.findall(r'\bqubit\(\)', stripped))
-    return max(individual + array_total, 2)
+    param_qubits = len(re.findall(r':\s*qubit\b', source))
+    return max(individual + array_total + param_qubits, 2)
+
+
+def _has_qubit_params(source: str, fn_name: str) -> bool:
+    """Return True if the named @guppy function has any qubit-typed parameters."""
+    if not fn_name:
+        return False
+    try:
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == fn_name:
+                for arg in node.args.args:
+                    if arg.annotation and "qubit" in ast.unparse(arg.annotation):
+                        return True
+    except (SyntaxError, AttributeError):
+        pass
+    return False
 
 
 # ── Inline emulator config parsing ────────────────────────────────────────

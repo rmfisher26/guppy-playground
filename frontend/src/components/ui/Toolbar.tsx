@@ -8,8 +8,9 @@ import type { SimulatorBackend, NoiseModelKind } from '../../lib/types';
 export default function Toolbar() {
   const { shots, setShots, simulator, setSimulator, noiseModel, setNoiseModel, errorRate, setErrorRate, guppyVersion, setGuppyVersion, availableVersions, runState, showToast } = usePlaygroundStore();
   const isMobile = useMobile();
-  const { run } = useRun();
+  const { run, compile } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
+  const isCompileOnly = runState.status === 'compiling' && runState.compileOnly;
 
   function handleShare() {
     const { source, shots, simulator, noiseModel, errorRate, guppyVersion } = usePlaygroundStore.getState();
@@ -97,6 +98,27 @@ export default function Toolbar() {
         height: 'var(--toolbar-h)', display: 'flex',
         alignItems: 'center', padding: '0 12px', gap: 8,
       }}>
+        {/* Compile button */}
+        <button
+          style={{
+            ...btnBase,
+            background: 'transparent',
+            color: isRunning ? 'var(--text-muted)' : 'var(--text-secondary)',
+            border: `1px solid ${isRunning ? 'var(--border)' : 'var(--border-bright)'}`,
+            cursor: isRunning ? 'not-allowed' : 'pointer',
+            opacity: isRunning ? 0.6 : 1,
+          }}
+          onClick={() => !isRunning && compile()}
+          title="Compile to HUGR (Ctrl+Shift+Enter)"
+          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (!isRunning) { const el = e.currentTarget; el.style.borderColor = 'var(--teal)'; el.style.color = 'var(--text-primary)'; } }}
+          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (!isRunning) { const el = e.currentTarget; el.style.borderColor = 'var(--border-bright)'; el.style.color = 'var(--text-secondary)'; } }}
+        >
+          {isCompileOnly
+            ? <><Spinner /> Compiling…</>
+            : <><CompileIcon /> Compile</>
+          }
+        </button>
+
         {/* Run button */}
         <button
           style={{
@@ -109,7 +131,7 @@ export default function Toolbar() {
           onClick={() => !isRunning && run()}
           title="Run (Ctrl+Enter)"
         >
-          {isRunning
+          {isRunning && !isCompileOnly
             ? <><Spinner /> Running…</>
             : <><PlayIcon /> Run</>
           }
@@ -429,6 +451,15 @@ function Spinner() {
 
 function PlayIcon() {
   return <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>;
+}
+
+function CompileIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
+    </svg>
+  );
 }
 
 function ShareIcon() {

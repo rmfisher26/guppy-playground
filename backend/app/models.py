@@ -15,15 +15,16 @@ class NoiseModelKind(str, Enum):
 
 
 class RunRequest(BaseModel):
-    source:      str
-    filename:    str = "main.py"         # display name shown in error messages
-    entry_point: str | None = None       # inferred from @guppy fn if None
-    shots:       int        = Field(1024, ge=1, le=8192)
-    simulator:   SimulatorBackend = SimulatorBackend.stabilizer
-    seed:        int | None = None
-    noise_model: NoiseModelKind | None = None
-    error_rate:  float = Field(0.001, ge=0.0, le=1.0)
-    version:     str | None = None       # guppylang version; None → server default
+    source:       str
+    filename:     str = "main.py"         # display name shown in error messages
+    entry_point:  str | None = None       # inferred from @guppy fn if None
+    shots:        int        = Field(1024, ge=1, le=8192)
+    simulator:    SimulatorBackend = SimulatorBackend.stabilizer
+    seed:         int | None = None
+    noise_model:  NoiseModelKind | None = None
+    error_rate:   float = Field(0.001, ge=0.0, le=1.0)
+    version:      str | None = None       # guppylang version; None → server default
+    compile_only: bool = False            # compile to HUGR only, skip simulation
 
 
 # ── Compile output ─────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ class RunResponse(BaseModel):
     errors:      list[CompileError] | None = None
     message:     str | None = None
     request_id:  str | None = None
+    stdout:      str | None = None
 
 
 # ── Examples ───────────────────────────────────────────────────────────────

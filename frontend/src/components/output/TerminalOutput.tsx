@@ -60,12 +60,13 @@ function TerminalContent({ state, simulator, source }: { state: RunState; simula
   if (state.status === 'success') {
     const { response, elapsed_ms } = state;
     const compile = response.compile;
+    const isCompileOnly = !response.results;
     const shotCount = response.results
       ? Object.values(response.results.counts).reduce((a, b) => a + b, 0).toLocaleString()
       : '—';
     return (
       <>
-        <Line color="var(--text-muted)">  guppylang {compile ? `→ HUGR IR (${compile.node_count} nodes) → selene-sim` : '→ selene-sim'} [{simLabel}]</Line>
+        <Line color="var(--text-muted)">  guppylang {compile ? `→ HUGR IR (${compile.node_count} nodes)${isCompileOnly ? '' : ' → selene-sim'}` : '→ selene-sim'} {isCompileOnly ? '' : `[${simLabel}]`}</Line>
         {autoStatevector && (
           <Line color="var(--teal)">  ℹ state_result() detected — Statevector enabled automatically</Line>
         )}
@@ -76,10 +77,20 @@ function TerminalContent({ state, simulator, source }: { state: RunState; simula
         <Line color="var(--green)">✓ Type check passed</Line>
         <Line color="var(--green)">✓ Linearity check passed — no qubit leaks</Line>
         {compile && <Line color="var(--green)">✓ Compiled to HUGR ({compile.node_count} nodes)</Line>}
-        <Blank />
-        <Line color="var(--teal)">Running {shotCount} shots · {simLabel}…</Line>
-        <Blank />
-        <Line color="var(--green)">✓ Simulation complete</Line>
+        {response.stdout && (
+          <>
+            <Blank />
+            <StdoutBlock text={response.stdout} />
+          </>
+        )}
+        {!isCompileOnly && (
+          <>
+            <Blank />
+            <Line color="var(--teal)">Running {shotCount} shots · {simLabel}…</Line>
+            <Blank />
+            <Line color="var(--green)">✓ Simulation complete</Line>
+          </>
+        )}
         <Blank />
         <Line color="var(--text-muted)">  Finished in {(elapsed_ms / 1000).toFixed(2)}s</Line>
       </>
@@ -91,6 +102,12 @@ function TerminalContent({ state, simulator, source }: { state: RunState; simula
       <>
         <Line color="var(--text-muted)">  guppylang → HUGR IR</Line>
         <Blank />
+        {state.stdout && (
+          <>
+            <StdoutBlock text={state.stdout} />
+            <Blank />
+          </>
+        )}
         {state.errors.map((err, i) => (
           <PrettyError key={i} message={err.message} />
         ))}
@@ -152,6 +169,22 @@ function SpinnerLine({ label }: { label: string }) {
         flexShrink: 0,
       }} />
       <span style={{ color: 'var(--teal)' }}>{label}</span>
+    </div>
+  );
+}
+
+// ── StdoutBlock ────────────────────────────────────────────────────────────
+// Displays captured print() output from the user's program.
+function StdoutBlock({ text }: { text: string }) {
+  const lines = text.split('\n').filter((_, i, arr) => i < arr.length - 1 || arr[i] !== '');
+  return (
+    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7 }}>
+      {lines.map((line, i) => (
+        <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 1 }}>
+          <span style={{ color: 'var(--text-muted)', flexShrink: 0, userSelect: 'none' }}>{'>'}</span>
+          <span style={{ color: 'var(--text-primary)', flex: 1, whiteSpace: 'pre' }}>{line || ' '}</span>
+        </div>
+      ))}
     </div>
   );
 }

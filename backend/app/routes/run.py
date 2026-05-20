@@ -33,37 +33,41 @@ async def run_endpoint(req: RunRequest, http_req: Request) -> RunResponse:
         noise_model=req.noise_model,
         error_rate=req.error_rate,
         version=req.version,
+        compile_only=req.compile_only,
     )
 
-    if isinstance(result, list):
+    if result.errors:
         logger.warning(
             "[%s] compile_error  errors=%d  first=%r",
             request_id,
-            len(result),
-            result[0].message if result else "none",
+            len(result.errors),
+            result.errors[0].message if result.errors else "none",
         )
         return RunResponse(
             status=RunStatus.compile_error,
-            errors=result,
+            errors=result.errors,
+            stdout=result.stdout,
             request_id=request_id,
         )
 
-    compile_ok, sim_ok = result
-    total_shots = sum(sim_ok.counts.values())
+    compile_ok = result.compile
+    sim_ok = result.results
+    total_shots = sum(sim_ok.counts.values()) if sim_ok else 0
 
     logger.info(
         "[%s] ok  nodes=%d  qubits=%d  shots=%d  outcomes=%d  ms=%d",
         request_id,
-        compile_ok.node_count,
-        compile_ok.qubit_count,
+        compile_ok.node_count if compile_ok else 0,
+        compile_ok.qubit_count if compile_ok else 0,
         total_shots,
-        len(sim_ok.counts),
-        compile_ok.compile_time_ms,
+        len(sim_ok.counts) if sim_ok else 0,
+        compile_ok.compile_time_ms if compile_ok else 0,
     )
 
     return RunResponse(
         status=RunStatus.ok,
         compile=compile_ok,
         results=sim_ok,
+        stdout=result.stdout,
         request_id=request_id,
     )

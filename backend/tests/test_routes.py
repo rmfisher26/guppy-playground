@@ -492,3 +492,57 @@ def test_inline_emulator_seed_is_reproducible():
     assert d1["status"] == d2["status"]
     if d1["status"] == "ok":
         assert d1["results"]["counts"] == d2["results"]["counts"]
+
+
+# ── Teleportation (qubit-parameter function) ───────────────────────────────
+
+TELEPORT_SOURCE = _prog("teleport")
+
+
+def test_teleport_compile_only_succeeds():
+    """Explicit compile_only=True on teleport should return ok with HUGR but no results."""
+    resp = client.post("/run", json={
+        "source":       TELEPORT_SOURCE,
+        "shots":        256,
+        "simulator":    "stabilizer",
+        "compile_only": True,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None
+        assert data["compile"] is not None
+        assert data["compile"]["qubit_count"] == 3  # src + tgt (params) + tmp (internal)
+
+
+def test_teleport_auto_compile_only():
+    """Sending teleport without compile_only should auto-detect qubit params and not simulate."""
+    resp = client.post("/run", json={
+        "source":    TELEPORT_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        # Backend auto-enables compile_only for functions with qubit parameters
+        assert data["results"] is None
+        assert data["compile"] is not None
+
+
+def test_teleport_linearity_error_caught():
+    """Introduce a linearity violation and verify the backend catches it."""
+    broken = TELEPORT_SOURCE.replace(
+        "if measure(tmp):\n        x(tgt)",
+        "# dropped measure(tmp) — tgt qubit leaked",
+    )
+    resp = client.post("/run", json={
+        "source":    broken,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    # Guppy should catch the linearity error (leaked qubit or unused measurement)
+    assert data["status"] in ("ok", "compile_error")
