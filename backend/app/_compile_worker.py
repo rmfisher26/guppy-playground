@@ -17,6 +17,7 @@ This is the ONLY file that imports guppylang and selene_sim directly.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import os
@@ -39,6 +40,11 @@ def main() -> None:
     noise_model: str | None = payload.get("noise_model")
     error_rate: float   = float(payload.get("error_rate", 0.001))
 
+    # Extract emulator config written inline in the source (e.g. main.emulator(1).run())
+    # and strip those calls before importing to avoid double-execution.
+    source_config = _parse_emulator_config(source)
+    import_source = _strip_emulator_calls(source) if source_config else source
+
     # importlib requires a real file path, and guppylang reads the source file
     # directly to build error spans — exec(source) would lose that information.
     tmpfile = tempfile.NamedTemporaryFile(
@@ -46,9 +52,9 @@ def main() -> None:
     )
     tmppath = tmpfile.name
     try:
-        tmpfile.write(source)
+        tmpfile.write(import_source)
         tmpfile.close()
-        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate)
+        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate, source_config)
     except Exception as exc:
         errors = _parse_error(exc, source, traceback.format_exc(), filename)
         print(json.dumps({"status": "error", "errors": errors}))
@@ -59,8 +65,14 @@ def main() -> None:
             pass
 
 
-def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001) -> None:
+def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001, source_config: dict | None = None) -> None:
     from guppylang.defs import GuppyFunctionDefinition
+
+    # Code-level emulator config takes precedence over UI-supplied parameters.
+    if source_config:
+        simulator = source_config.get("simulator", simulator)
+        shots     = source_config.get("shots",     shots)
+        seed      = source_config.get("seed",      seed)
 
     spec = importlib.util.spec_from_file_location("_guppy_user", tmppath)
     if spec is None or spec.loader is None:
@@ -91,7 +103,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         }))
         return
 
-    n_qubits = _infer_qubit_count(source)
+    n_qubits = (source_config.get("n_qubits") if source_config else None) or _infer_qubit_count(source)
 
     if simulator == "statevector" and n_qubits > MAX_QUBITS_STATEVECTOR:
         raise ValueError(
@@ -426,6 +438,119 @@ def _infer_qubit_count(source: str) -> int:
     stripped = re.sub(array_pat, '', source)
     individual = len(re.findall(r'\bqubit\(\)', stripped))
     return max(individual + array_total, 2)
+
+
+# ── Inline emulator config parsing ────────────────────────────────────────
+
+def _parse_emulator_config(source: str) -> dict | None:
+    """Extract emulator run parameters from module-level emulator chain calls.
+
+    Detects patterns like:
+        fn.emulator(n_qubits=1).run()
+        fn.emulator(1).statevector_sim().with_shots(100).with_seed(42).run()
+
+    Returns a dict with any subset of: n_qubits, simulator, shots, seed.
+    Returns None if no such call is found or n_qubits cannot be determined.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in tree.body:
+        # Only inspect plain statements and assignments, not function/class defs.
+        if not isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Expr)):
+            continue
+        config = _extract_emulator_chain_config(node)
+        if config is not None:
+            return config
+    return None
+
+
+def _extract_emulator_chain_config(node) -> dict | None:
+    """Walk an AST statement to find a .emulator(...).....run() method chain.
+
+    Walks the chain from .run() inward, collecting method names and arguments,
+    until it reaches .emulator() and extracts n_qubits.
+    """
+    for child in ast.walk(node):
+        if not (isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr == "run"):
+            continue
+        config: dict = {}
+        current = child.func.value
+        while isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute):
+            method = current.func.attr
+            if method == "emulator":
+                if current.args:
+                    try:
+                        config["n_qubits"] = int(ast.literal_eval(current.args[0]))
+                    except (ValueError, TypeError):
+                        pass
+                for kw in current.keywords:
+                    if kw.arg == "n_qubits":
+                        try:
+                            config["n_qubits"] = int(ast.literal_eval(kw.value))
+                        except (ValueError, TypeError):
+                            pass
+                return config if "n_qubits" in config else None
+            elif method == "statevector_sim":
+                config["simulator"] = "statevector"
+            elif method == "stabilizer_sim":
+                config["simulator"] = "stabilizer"
+            elif method == "with_shots" and current.args:
+                try:
+                    config["shots"] = int(ast.literal_eval(current.args[0]))
+                except (ValueError, TypeError):
+                    pass
+            elif method == "with_seed" and current.args:
+                try:
+                    config["seed"] = int(ast.literal_eval(current.args[0]))
+                except (ValueError, TypeError):
+                    pass
+            current = current.func.value
+    return None
+
+
+def _strip_emulator_calls(source: str) -> str:
+    """Remove module-level .emulator(...).run() statements from source.
+
+    Prevents double-execution when the worker separately controls the emulator run.
+    Only removes plain statement / assignment nodes — never function definitions.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+    lines_to_remove: set[int] = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Expr)):
+            continue
+        if _node_has_emulator_run(node):
+            end = getattr(node, "end_lineno", node.lineno)
+            for ln in range(node.lineno, end + 1):
+                lines_to_remove.add(ln)
+    if not lines_to_remove:
+        return source
+    return "".join(
+        line for i, line in enumerate(source.splitlines(keepends=True), start=1)
+        if i not in lines_to_remove
+    )
+
+
+def _node_has_emulator_run(node) -> bool:
+    """Return True if the AST node contains a .emulator(...).run() chain."""
+    for child in ast.walk(node):
+        if not (isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr == "run"):
+            continue
+        current = child.func.value
+        while isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute):
+            if current.func.attr == "emulator":
+                return True
+            current = current.func.value
+    return False
 
 
 # ── HUGR node extraction ───────────────────────────────────────────────────
