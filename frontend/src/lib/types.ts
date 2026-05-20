@@ -13,6 +13,7 @@ export interface RunRequest {
   noise_model?: NoiseModelKind;
   error_rate?: number;
   version?: string;             // guppylang version; omit for server default
+  compile_only?: boolean;       // compile to HUGR only, skip simulation
 }
 
 export interface HugrNode {
@@ -80,6 +81,7 @@ export interface RunResponse {
   message?: string;
   retry_after_ms?: number;
   request_id?: string;
+  stdout?: string;
 }
 
 export interface HealthResponse {
@@ -113,10 +115,10 @@ export interface VersionsResponse {
 export type RunState =
   | { status: 'idle' }
   | { status: 'preparing' }
-  | { status: 'compiling' }
+  | { status: 'compiling'; compileOnly?: boolean }
   | { status: 'simulating' }
   | { status: 'success'; response: RunResponse; elapsed_ms: number; simulator: SimulatorBackend }
-  | { status: 'compile_error'; errors: CompileError[] }
+  | { status: 'compile_error'; errors: CompileError[]; stdout?: string }
   | { status: 'timeout' }
   | { status: 'rate_limited'; retry_after_ms: number }
   | { status: 'internal_error'; message: string };

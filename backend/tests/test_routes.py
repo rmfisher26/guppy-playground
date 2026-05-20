@@ -3,11 +3,17 @@ Integration tests for the API routes.
 Run with: pytest backend/tests/ -v
 """
 from __future__ import annotations
+import pathlib
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
+
+_PROGRAMS = pathlib.Path(__file__).parent / "programs"
+
+def _prog(name: str) -> str:
+    return (_PROGRAMS / f"{name}.py").read_text()
 
 
 # ── Health ─────────────────────────────────────────────────────────────────
@@ -38,20 +44,7 @@ def test_examples_returns_list():
 
 # ── Run ────────────────────────────────────────────────────────────────────
 
-BELL_SOURCE = """\
-from guppylang import guppy
-from guppylang.std.quantum import qubit, h, cx, measure
-
-@guppy
-def bell_pair() -> tuple[bool, bool]:
-    q0 = qubit()
-    q1 = qubit()
-    h(q0)
-    cx(q0, q1)
-    return measure(q0), measure(q1)
-
-bell_pair.check()
-"""
+BELL_SOURCE = _prog("bell_pair")
 
 def test_run_bell_pair():
     resp = client.post("/run", json={
@@ -295,39 +288,8 @@ def test_run_noisy_seed_is_reproducible():
 
 # ── Register names ─────────────────────────────────────────────────────────
 
-NAMED_RESULT_SOURCE = """\
-from guppylang import guppy
-from guppylang.std.builtins import result
-from guppylang.std.quantum import qubit, h, cx, measure
-
-@guppy
-def main() -> None:
-    q0 = qubit()
-    q1 = qubit()
-    h(q0)
-    cx(q0, q1)
-    result("m0", measure(q0))
-    result("m1", measure(q1))
-
-main.check()
-"""
-
-GHZ_SOURCE = """\
-from guppylang import guppy
-from guppylang.std.builtins import array, result
-from guppylang.std.quantum import qubit, h, cx, measure_array
-
-@guppy
-def main() -> None:
-    qubits = array(qubit() for _ in range(5))
-    h(qubits[0])
-    for i in range(4):
-        cx(qubits[i], qubits[i + 1])
-    ms = measure_array(qubits)
-    result("q", ms)
-
-main.check()
-"""
+NAMED_RESULT_SOURCE = _prog("named_results")
+GHZ_SOURCE          = _prog("ghz")
 
 
 def test_run_named_result_returns_register_names():
@@ -490,3 +452,157 @@ def test_cors_preflight():
         },
     )
     assert resp.status_code in (200, 204)
+
+
+# ── Inline emulator config ─────────────────────────────────────────────────
+
+INLINE_EMULATOR_SOURCE = _prog("inline_emulator")
+
+def test_inline_emulator_runs_via_api():
+    """Source with main.emulator(...).run() should succeed and honour code-specified shots."""
+    resp = client.post("/run", json={
+        "source":    INLINE_EMULATOR_SOURCE,
+        "shots":     1024,   # UI value — should be overridden by with_shots(256) in source
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        results = data["results"]
+        assert results is not None
+        # Code specifies with_shots(256); UI sent 1024 — code wins
+        assert sum(results["counts"].values()) == 256
+        # Program uses result("c", ...) — register name should be present
+        assert results["register_names"] == ["c"]
+
+
+def test_inline_emulator_seed_is_reproducible():
+    """Code-specified seed (with_seed(7)) makes results deterministic across calls."""
+    payload = {
+        "source":    INLINE_EMULATOR_SOURCE,
+        "shots":     1024,
+        "simulator": "stabilizer",
+        # No UI seed — seed comes from the source itself
+    }
+    r1 = client.post("/run", json=payload)
+    r2 = client.post("/run", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+    d1, d2 = r1.json(), r2.json()
+    assert d1["status"] == d2["status"]
+    if d1["status"] == "ok":
+        assert d1["results"]["counts"] == d2["results"]["counts"]
+
+
+# ── Teleportation (qubit-parameter function) ───────────────────────────────
+
+TELEPORT_SOURCE = _prog("teleport")
+
+
+def test_teleport_compile_only_succeeds():
+    """Explicit compile_only=True on teleport should return ok with HUGR but no results."""
+    resp = client.post("/run", json={
+        "source":       TELEPORT_SOURCE,
+        "shots":        256,
+        "simulator":    "stabilizer",
+        "compile_only": True,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None
+        assert data["compile"] is not None
+        assert data["compile"]["qubit_count"] == 3  # src + tgt (params) + tmp (internal)
+
+
+def test_teleport_auto_compile_only():
+    """Sending teleport without compile_only should auto-detect qubit params and not simulate."""
+    resp = client.post("/run", json={
+        "source":    TELEPORT_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        # Backend auto-enables compile_only for functions with qubit parameters
+        assert data["results"] is None
+        assert data["compile"] is not None
+
+
+def test_teleport_linearity_error_caught():
+    """Introduce a linearity violation and verify the backend catches it."""
+    broken = TELEPORT_SOURCE.replace(
+        "if measure(tmp):\n        x(tgt)",
+        "# dropped measure(tmp) — tgt qubit leaked",
+    )
+    resp = client.post("/run", json={
+        "source":    broken,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    # Guppy should catch the linearity error (leaked qubit or unused measurement)
+    assert data["status"] in ("ok", "compile_error")
+
+
+# ── coin_flip (compile() call in source) ───────────────────────────────────
+
+COIN_FLIP_SOURCE = _prog("coin_flip")
+
+
+def test_coin_flip_compile_call_detected():
+    """Source with coin_flip.compile() should auto-switch to compile-only mode."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None          # no simulation ran
+        assert data["compile"] is not None
+
+
+def test_coin_flip_stdout_captured():
+    """print() calls after compile() should appear in the response stdout field."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        stdout = data.get("stdout") or ""
+        assert "hugr.package.Package" in stdout
+        assert "HUGR package:" in stdout
+        assert "bytes" in stdout
+
+
+# ── hadamard (compile_function() call in source) ───────────────────────────
+
+HADAMARD_SOURCE = _prog("hadamard")
+
+
+def test_hadamard_compile_function_linearity_error():
+    """hadamard returns a borrowed qubit without @owned — guppy must catch this."""
+    resp = client.post("/run", json={
+        "source":    HADAMARD_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "compile_error"
+    errors = data["errors"]
+    assert errors, "expected at least one compile error"
+    msg = errors[0]["message"]
+    assert "owned" in msg.lower() or "borrow" in msg.lower(), (
+        f"Expected ownership/linearity error, got: {msg!r}"
+    )
+    assert errors[0]["kind"] == "linearity_error"

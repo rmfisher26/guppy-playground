@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from .config import COMPATIBLE_VERSIONS, DEFAULT_VERSION, SUPPORTED_VERSIONS
@@ -25,6 +26,14 @@ from .models import (
     ErrorKind, HugrNode, SimulationResults, StateSnapshot, StateTracedState,
 )
 from .sandbox import run_subprocess
+
+
+@dataclass
+class WorkerResult:
+    compile: CompileSuccess | None
+    results: SimulationResults | None
+    errors: list[CompileError] | None
+    stdout: str | None
 
 WORKER = Path(__file__).parent / "_compile_worker.py"
 TIMEOUT = 60  # compile + simulate together; give generous budget
@@ -57,81 +66,74 @@ async def compile_and_simulate(
     noise_model: str | None = None,
     error_rate: float = 0.001,
     version: str | None = None,
-) -> tuple[CompileSuccess, SimulationResults] | list[CompileError]:
-    """Compile and simulate a Guppy program in one sandboxed subprocess.
-
-    Args:
-        source:      Raw Guppy Python source code.
-        shots:       Number of measurement shots to simulate.
-        simulator:   Simulator backend name (e.g. "stabilizer", "statevector").
-        seed:        Optional RNG seed for reproducible results.
-        entry_point: Name of the @guppy function to run (defaults to worker heuristic).
-        filename:    Filename reported in compile error messages.
-        noise_model: Noise model kind ("depolarizing") or None for ideal simulation.
-        error_rate:  Per-gate error probability for the noise model.
-        version:     guppylang version string (e.g. "0.21.11"), or None for default.
-
-    Returns:
-        ``(CompileSuccess, SimulationResults)`` on success, or
-        ``list[CompileError]`` if compilation or simulation fails.
-    """
+    compile_only: bool = False,
+) -> WorkerResult:
+    """Compile (and optionally simulate) a Guppy program in one sandboxed subprocess."""
     if version is not None and version not in SUPPORTED_VERSIONS:
-        return [CompileError(
-            message=f"Unsupported guppylang version: {version!r}",
-            line=1,
-            kind=ErrorKind.internal_error,
-        )]
+        return WorkerResult(
+            compile=None, results=None, stdout=None,
+            errors=[CompileError(
+                message=f"Unsupported guppylang version: {version!r}",
+                line=1,
+                kind=ErrorKind.internal_error,
+            )],
+        )
 
     t0 = time.monotonic()
 
     result = await run_subprocess(
         _worker_command(version),
         input_data=json.dumps({
-            "source":      source,
-            "filename":    filename,
-            "shots":       shots,
-            "simulator":   simulator,
-            "seed":        seed,
-            "noise_model": noise_model,
-            "error_rate":  error_rate,
-            "version":     version,
+            "source":       source,
+            "filename":     filename,
+            "shots":        shots,
+            "simulator":    simulator,
+            "seed":         seed,
+            "noise_model":  noise_model,
+            "error_rate":   error_rate,
+            "version":      version,
+            "compile_only": compile_only,
         }),
         timeout=TIMEOUT,
     )
 
-    # Covers both compile + simulate — the worker does them in one pass
     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
+    def _err(msg: str, kind: ErrorKind = ErrorKind.internal_error) -> WorkerResult:
+        return WorkerResult(
+            compile=None, results=None, stdout=None,
+            errors=[CompileError(message=msg, line=1, kind=kind)],
+        )
+
     if result.timed_out:
-        return [CompileError(
-            message=f"Execution timed out after {TIMEOUT}s",
-            line=1,
-            kind=ErrorKind.internal_error,
-        )]
+        return _err(f"Execution timed out after {TIMEOUT}s")
 
     if not result.stdout.strip():
-        msg = result.stderr[:400] or "Worker produced no output"
-        return [CompileError(message=msg, line=1, kind=ErrorKind.internal_error)]
+        return _err(result.stderr[:400] or "Worker produced no output")
 
     try:
         data = json.loads(result.stdout)
     except json.JSONDecodeError:
-        raw = (result.stderr or result.stdout)[:400]
-        return [CompileError(message=raw, line=1, kind=ErrorKind.internal_error)]
+        return _err((result.stderr or result.stdout)[:400])
+
+    user_stdout: str | None = data.get("stdout") or None
 
     if data.get("status") == "error":
-        return [
-            CompileError(
-                message=e["message"],
-                line=e.get("line", 1),
-                col=e.get("col", 0),
-                kind=ErrorKind(e.get("kind", "internal_error")),
-            )
-            for e in data.get("errors", [])
-        ]
+        return WorkerResult(
+            compile=None, results=None, stdout=user_stdout,
+            errors=[
+                CompileError(
+                    message=e["message"],
+                    line=e.get("line", 1),
+                    col=e.get("col", 0),
+                    kind=ErrorKind(e.get("kind", "internal_error")),
+                )
+                for e in data.get("errors", [])
+            ],
+        )
 
-    nodes      = [HugrNode(**n) for n in data.get("hugr_nodes", [])]
-    warnings   = [CompileWarning(**w) for w in data.get("warnings", [])]
+    nodes       = [HugrNode(**n) for n in data.get("hugr_nodes", [])]
+    warnings    = [CompileWarning(**w) for w in data.get("warnings", [])]
     qubit_count = data.get("qubit_count", 2)
 
     compile_ok = CompileSuccess(
@@ -142,6 +144,11 @@ async def compile_and_simulate(
         warnings=warnings,
         compile_time_ms=elapsed_ms,
     )
+
+    # compile-only: skip building SimulationResults.
+    # Empty counts means the worker auto-switched (e.g. qubit-param function) — treat the same way.
+    if compile_only or not data.get("counts"):
+        return WorkerResult(compile=compile_ok, results=None, errors=None, stdout=user_stdout)
 
     raw_snaps = data.get("state_snapshots")
     state_snapshots = None
@@ -173,4 +180,4 @@ async def compile_and_simulate(
         state_snapshots=state_snapshots,
     )
 
-    return compile_ok, sim_ok
+    return WorkerResult(compile=compile_ok, results=sim_ok, errors=None, stdout=user_stdout)

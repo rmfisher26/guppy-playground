@@ -17,7 +17,9 @@ This is the ONLY file that imports guppylang and selene_sim directly.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
+import io
 import json
 import os
 import re
@@ -39,19 +41,33 @@ def main() -> None:
     noise_model: str | None = payload.get("noise_model")
     error_rate: float   = float(payload.get("error_rate", 0.001))
 
+    # Extract emulator config written inline in the source (e.g. main.emulator(1).run())
+    # and strip those calls before importing to avoid double-execution.
+    compile_only: bool      = bool(payload.get("compile_only", False))
+
+    source_config = _parse_emulator_config(source)
+    import_source = _strip_emulator_calls(source) if source_config else source
+
+    # fn.compile() / fn.compile_function() in module scope → compile-only.
+    # Unlike emulator calls, we do NOT strip these — they produce a Package object
+    # that subsequent print() calls may reference, and the stdout is captured.
+    if not compile_only and _parse_compile_call(source):
+        compile_only = True
+
     # importlib requires a real file path, and guppylang reads the source file
     # directly to build error spans — exec(source) would lose that information.
     tmpfile = tempfile.NamedTemporaryFile(
         suffix=".py", mode="w", delete=False, prefix="guppy_user_"
     )
     tmppath = tmpfile.name
+    stdout_holder: list[str | None] = [None]  # populated by _run after exec_module
     try:
-        tmpfile.write(source)
+        tmpfile.write(import_source)
         tmpfile.close()
-        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate)
+        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate, source_config, compile_only, stdout_holder)
     except Exception as exc:
         errors = _parse_error(exc, source, traceback.format_exc(), filename)
-        print(json.dumps({"status": "error", "errors": errors}))
+        print(json.dumps({"status": "error", "errors": errors, "stdout": stdout_holder[0]}))
     finally:
         try:
             os.unlink(tmppath)
@@ -59,26 +75,44 @@ def main() -> None:
             pass
 
 
-def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001) -> None:
+def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001, source_config: dict | None = None, compile_only: bool = False, stdout_holder: list | None = None) -> None:
     from guppylang.defs import GuppyFunctionDefinition
+
+    # Code-level emulator config takes precedence over UI-supplied parameters.
+    if source_config:
+        simulator = source_config.get("simulator", simulator)
+        shots     = source_config.get("shots",     shots)
+        seed      = source_config.get("seed",      seed)
 
     spec = importlib.util.spec_from_file_location("_guppy_user", tmppath)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load {tmppath}")
 
     module = importlib.util.module_from_spec(spec)
+    # Capture user print() output so it can be forwarded to the frontend without
+    # corrupting the JSON response channel (stdout is parsed as JSON by the backend).
+    _saved_stdout = sys.stdout
+    _capture = io.StringIO()
+    sys.stdout = _capture
     try:
         spec.loader.exec_module(module)  # type: ignore[union-attr]
     except SystemExit:
         pass  # user programs or guppylang internals may call sys.exit() at module level
+    finally:
+        sys.stdout = _saved_stdout
+    user_stdout: str | None = _capture.getvalue() or None
+    if stdout_holder is not None:
+        stdout_holder[0] = user_stdout
     # GuppyError propagates out of exec_module — let it bubble to main()
 
     # Find main() entry point first, then any other @guppy fn
     guppy_fn = None
+    guppy_fn_name: str | None = None
     for attr in ("main", *dir(module)):
         obj = getattr(module, attr, None)
         if isinstance(obj, GuppyFunctionDefinition):
             guppy_fn = obj
+            guppy_fn_name = attr
             break
 
     if guppy_fn is None:
@@ -88,10 +122,16 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
             "hugr_nodes":  _infer_nodes(source),
             "warnings":    [],
             "qubit_count": 0,
+            "stdout":      user_stdout,
         }))
         return
 
-    n_qubits = _infer_qubit_count(source)
+    # Functions with qubit input parameters can't be run by the emulator without
+    # a wrapper main(). Auto-switch to compile-only so type-check programs work.
+    if not compile_only and guppy_fn_name != "main" and _has_qubit_params(source, guppy_fn_name or ""):
+        compile_only = True
+
+    n_qubits = (source_config.get("n_qubits") if source_config else None) or _infer_qubit_count(source)
 
     if simulator == "statevector" and n_qubits > MAX_QUBITS_STATEVECTOR:
         raise ValueError(
@@ -102,11 +142,14 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
     if n_qubits > MAX_QUBITS_STABILIZER:
         raise ValueError(f"{n_qubits} qubits exceeds playground limit of {MAX_QUBITS_STABILIZER}.")
 
-    # Compile HUGR for display panel
+    # Compile HUGR for display panel.
+    # Functions with parameters (qubit or otherwise) must use compile_function();
+    # parameter-free functions (entrypoints) use compile().
     hugr_nodes: list[dict] = []
     hugr_json: dict | None = None
+    fn_has_params = _fn_has_any_params(source, guppy_fn_name or "")
     try:
-        pkg = guppy_fn.compile()
+        pkg = guppy_fn.compile_function() if fn_has_params else guppy_fn.compile()
         hugr_str = pkg.to_str()
         try:
             json_start = hugr_str.index('{')
@@ -116,6 +159,21 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         hugr_nodes = _extract_nodes(hugr_str)
     except Exception:
         hugr_nodes = _infer_nodes(source)
+
+    if compile_only:
+        print(json.dumps({
+            "status":          "ok",
+            "counts":          {},
+            "noisy_counts":    None,
+            "register_names":  None,
+            "hugr_nodes":      hugr_nodes,
+            "hugr_json":       hugr_json,
+            "warnings":        [],
+            "qubit_count":     n_qubits,
+            "state_snapshots": None,
+            "stdout":          user_stdout,
+        }))
+        return
 
     # Simulate
     emulator = guppy_fn.emulator(n_qubits=n_qubits).with_shots(shots)
@@ -196,6 +254,7 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         "warnings":        [],
         "qubit_count":     n_qubits,
         "state_snapshots": state_snapshots,
+        "stdout":          user_stdout,
     }))
 
 
@@ -420,12 +479,183 @@ def _render_plain_error(exc: Exception, tb_str: str) -> dict:
 def _infer_qubit_count(source: str) -> int:
     # Count array(qubit() for _ in range(n)) comprehensions specifically,
     # then count remaining bare qubit() calls outside those patterns.
+    # Also count qubit-typed function parameters (e.g. src: qubit @ owned).
     # Falls back to 2 so the emulator always gets a valid circuit width.
     array_pat = r'array\s*\(\s*qubit\s*\(\s*\)\s+for\s+\w+\s+in\s+range\s*\(\s*(\d+)\s*\)\s*\)'
     array_total = sum(int(m) for m in re.findall(array_pat, source))
     stripped = re.sub(array_pat, '', source)
     individual = len(re.findall(r'\bqubit\(\)', stripped))
-    return max(individual + array_total, 2)
+    param_qubits = len(re.findall(r':\s*qubit\b', source))
+    return max(individual + array_total + param_qubits, 2)
+
+
+def _fn_has_any_params(source: str, fn_name: str) -> bool:
+    """Return True if the named function has any parameters at all."""
+    if not fn_name:
+        return False
+    try:
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == fn_name:
+                return bool(node.args.args)
+    except (SyntaxError, AttributeError):
+        pass
+    return False
+
+
+def _parse_compile_call(source: str) -> bool:
+    """Return True if source has a module-level .compile() or .compile_function() call.
+
+    Detects patterns like:
+        pkg = my_fn.compile()
+        pkg = my_fn.compile_function()
+        my_fn.compile()
+
+    Does not match calls inside function or class bodies.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Expr)):
+            continue
+        for child in ast.walk(node):
+            if (isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Attribute)
+                    and child.func.attr in ("compile", "compile_function")
+                    and isinstance(child.func.value, ast.Name)):
+                return True
+    return False
+
+
+def _has_qubit_params(source: str, fn_name: str) -> bool:
+    """Return True if the named @guppy function has any qubit-typed parameters."""
+    if not fn_name:
+        return False
+    try:
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == fn_name:
+                for arg in node.args.args:
+                    if arg.annotation and "qubit" in ast.unparse(arg.annotation):
+                        return True
+    except (SyntaxError, AttributeError):
+        pass
+    return False
+
+
+# ── Inline emulator config parsing ────────────────────────────────────────
+
+def _parse_emulator_config(source: str) -> dict | None:
+    """Extract emulator run parameters from module-level emulator chain calls.
+
+    Detects patterns like:
+        fn.emulator(n_qubits=1).run()
+        fn.emulator(1).statevector_sim().with_shots(100).with_seed(42).run()
+
+    Returns a dict with any subset of: n_qubits, simulator, shots, seed.
+    Returns None if no such call is found or n_qubits cannot be determined.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in tree.body:
+        # Only inspect plain statements and assignments, not function/class defs.
+        if not isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Expr)):
+            continue
+        config = _extract_emulator_chain_config(node)
+        if config is not None:
+            return config
+    return None
+
+
+def _extract_emulator_chain_config(node) -> dict | None:
+    """Walk an AST statement to find a .emulator(...).....run() method chain.
+
+    Walks the chain from .run() inward, collecting method names and arguments,
+    until it reaches .emulator() and extracts n_qubits.
+    """
+    for child in ast.walk(node):
+        if not (isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr == "run"):
+            continue
+        config: dict = {}
+        current = child.func.value
+        while isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute):
+            method = current.func.attr
+            if method == "emulator":
+                if current.args:
+                    try:
+                        config["n_qubits"] = int(ast.literal_eval(current.args[0]))
+                    except (ValueError, TypeError):
+                        pass
+                for kw in current.keywords:
+                    if kw.arg == "n_qubits":
+                        try:
+                            config["n_qubits"] = int(ast.literal_eval(kw.value))
+                        except (ValueError, TypeError):
+                            pass
+                return config if "n_qubits" in config else None
+            elif method == "statevector_sim":
+                config["simulator"] = "statevector"
+            elif method == "stabilizer_sim":
+                config["simulator"] = "stabilizer"
+            elif method == "with_shots" and current.args:
+                try:
+                    config["shots"] = int(ast.literal_eval(current.args[0]))
+                except (ValueError, TypeError):
+                    pass
+            elif method == "with_seed" and current.args:
+                try:
+                    config["seed"] = int(ast.literal_eval(current.args[0]))
+                except (ValueError, TypeError):
+                    pass
+            current = current.func.value
+    return None
+
+
+def _strip_emulator_calls(source: str) -> str:
+    """Remove module-level .emulator(...).run() statements from source.
+
+    Prevents double-execution when the worker separately controls the emulator run.
+    Only removes plain statement / assignment nodes — never function definitions.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+    lines_to_remove: set[int] = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Expr)):
+            continue
+        if _node_has_emulator_run(node):
+            end = getattr(node, "end_lineno", node.lineno)
+            for ln in range(node.lineno, end + 1):
+                lines_to_remove.add(ln)
+    if not lines_to_remove:
+        return source
+    return "".join(
+        line for i, line in enumerate(source.splitlines(keepends=True), start=1)
+        if i not in lines_to_remove
+    )
+
+
+def _node_has_emulator_run(node) -> bool:
+    """Return True if the AST node contains a .emulator(...).run() chain."""
+    for child in ast.walk(node):
+        if not (isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr == "run"):
+            continue
+        current = child.func.value
+        while isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute):
+            if current.func.attr == "emulator":
+                return True
+            current = current.func.value
+    return False
 
 
 # ── HUGR node extraction ───────────────────────────────────────────────────
