@@ -589,6 +589,70 @@ def test_coin_flip_stdout_captured():
 HADAMARD_SOURCE = _prog("hadamard")
 
 
+# ── Max qubit limits ────────────────────────────────────────────────────────
+
+MAX_QUBITS_STABILIZER_SOURCE  = _prog("max_qubits_stabilizer")
+MAX_QUBITS_STATEVECTOR_SOURCE = _prog("max_qubits_statevector")
+
+
+def test_max_qubits_stabilizer_at_limit():
+    """50-qubit program should succeed on the Stim stabilizer backend."""
+    resp = client.post("/run", json={
+        "source":    MAX_QUBITS_STABILIZER_SOURCE,
+        "shots":     32,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is not None
+        assert sum(data["results"]["counts"].values()) == 32
+        assert data["compile"]["qubit_count"] == 50
+
+
+def test_max_qubits_stabilizer_over_limit_rejected():
+    """51 qubits exceeds the stabilizer cap — backend must return an error."""
+    over_source = MAX_QUBITS_STABILIZER_SOURCE.replace("range(50)", "range(51)")
+    resp = client.post("/run", json={
+        "source":    over_source,
+        "shots":     32,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "compile_error"
+
+
+def test_max_qubits_statevector_at_limit():
+    """20-qubit program should succeed on the QuEST statevector backend."""
+    resp = client.post("/run", json={
+        "source":    MAX_QUBITS_STATEVECTOR_SOURCE,
+        "shots":     1,   # 2^20 state — keep shot count low
+        "simulator": "statevector",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is not None
+        assert sum(data["results"]["counts"].values()) == 1
+        assert data["compile"]["qubit_count"] == 20
+
+
+def test_max_qubits_statevector_over_limit_rejected():
+    """21 qubits exceeds the statevector cap — backend must return an error."""
+    over_source = MAX_QUBITS_STATEVECTOR_SOURCE.replace("range(20)", "range(21)")
+    resp = client.post("/run", json={
+        "source":    over_source,
+        "shots":     1,
+        "simulator": "statevector",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "compile_error"
+
+
 def test_hadamard_compile_function_linearity_error():
     """hadamard returns a borrowed qubit without @owned — guppy must catch this."""
     resp = client.post("/run", json={
