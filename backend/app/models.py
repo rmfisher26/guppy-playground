@@ -25,6 +25,7 @@ class RunRequest(BaseModel):
     error_rate:   float = Field(0.001, ge=0.0, le=1.0)
     version:      str | None = None       # guppylang version; None → server default
     compile_only: bool = False            # compile to HUGR only, skip simulation
+    check_only:   bool = False            # type/linearity check only, no HUGR
 
 
 # ── Compile output ─────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ class SimulationResults(BaseModel):
 
 class RunStatus(str, Enum):
     ok             = "ok"
+    check_ok       = "check_ok"
     compile_error  = "compile_error"
     timeout        = "timeout"
     internal_error = "internal_error"

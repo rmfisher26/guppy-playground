@@ -112,6 +112,47 @@ export function useRun() {
     }
   }
 
+  async function check() {
+    const { source, guppyVersion, activeSlot, examples, setRunState, setActiveTab } =
+      usePlaygroundStore.getState();
+
+    if (isRunning()) return;
+
+    const filename = deriveFilename(activeSlot, examples);
+    const start = performance.now();
+
+    if (!backendReady) {
+      setRunState({ status: 'preparing' });
+      try { await fetchHealth(); } catch { /* proceed regardless */ }
+      backendReady = true;
+    }
+
+    setRunState({ status: 'compiling', checkOnly: true });
+    setActiveTab('output');
+
+    try {
+      const response = await apiRun({
+        source, filename, shots: 1, simulator: 'stabilizer',
+        check_only: true,
+        ...(guppyVersion ? { version: guppyVersion } : {}),
+      });
+      const elapsed_ms = Math.round(performance.now() - start);
+
+      if (response.status === 'check_ok') {
+        setRunState({ status: 'check_success', elapsed_ms });
+      } else if (response.status === 'compile_error') {
+        setRunState({ status: 'compile_error', errors: response.errors ?? [], stdout: response.stdout });
+      } else if (response.status === 'timeout') {
+        setRunState({ status: 'timeout' });
+      } else {
+        setRunState({ status: 'internal_error', message: response.message ?? 'Unknown error' });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Network error — is the backend running?';
+      setRunState({ status: 'internal_error', message });
+    }
+  }
+
   // Ctrl+Enter → run; Ctrl+Shift+Enter → compile only
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -125,5 +166,5 @@ export function useRun() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
-  return { run, compile };
+  return { run, compile, check };
 }

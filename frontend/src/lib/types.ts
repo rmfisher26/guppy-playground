@@ -14,6 +14,7 @@ export interface RunRequest {
   error_rate?: number;
   version?: string;             // guppylang version; omit for server default
   compile_only?: boolean;       // compile to HUGR only, skip simulation
+  check_only?: boolean;         // type/linearity check only, no HUGR
 }
 
 export interface HugrNode {
@@ -71,7 +72,7 @@ export interface SimulationResults {
   state_snapshots?: StateSnapshot[][];  // [shot][call-order]
 }
 
-export type RunStatus = 'ok' | 'compile_error' | 'timeout' | 'rate_limited' | 'internal_error';
+export type RunStatus = 'ok' | 'check_ok' | 'compile_error' | 'timeout' | 'rate_limited' | 'internal_error';
 
 export interface RunResponse {
   status: RunStatus;
@@ -115,9 +116,10 @@ export interface VersionsResponse {
 export type RunState =
   | { status: 'idle' }
   | { status: 'preparing' }
-  | { status: 'compiling'; compileOnly?: boolean }
+  | { status: 'compiling'; compileOnly?: boolean; checkOnly?: boolean }
   | { status: 'simulating' }
   | { status: 'success'; response: RunResponse; elapsed_ms: number; simulator: SimulatorBackend }
+  | { status: 'check_success'; elapsed_ms: number }
   | { status: 'compile_error'; errors: CompileError[]; stdout?: string }
   | { status: 'timeout' }
   | { status: 'rate_limited'; retry_after_ms: number }

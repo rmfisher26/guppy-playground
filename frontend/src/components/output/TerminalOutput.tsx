@@ -34,6 +34,15 @@ function TerminalContent({ state, simulator, source }: { state: RunState; simula
   }
 
   if (state.status === 'compiling') {
+    if (state.checkOnly) {
+      return (
+        <>
+          <Line color="var(--teal)">Checking…</Line>
+          <Blank />
+          <SpinnerLine label="Type checking & linearity check" />
+        </>
+      );
+    }
     return (
       <>
         <Line color="var(--teal)">Compiling…</Line>
@@ -41,6 +50,17 @@ function TerminalContent({ state, simulator, source }: { state: RunState; simula
         <Line color="var(--text-muted)">  guppylang → HUGR IR → selene-sim [{simLabel}]</Line>
         <Blank />
         <SpinnerLine label="Type checking" />
+      </>
+    );
+  }
+
+  if (state.status === 'check_success') {
+    return (
+      <>
+        <Line color="var(--green)">✓ Type check passed</Line>
+        <Line color="var(--green)">✓ Linearity check passed — no qubit leaks</Line>
+        <Blank />
+        <Line color="var(--text-muted)">  Finished in {(state.elapsed_ms / 1000).toFixed(2)}s</Line>
       </>
     );
   }

@@ -44,6 +44,7 @@ def main() -> None:
     # Extract emulator config written inline in the source (e.g. main.emulator(1).run())
     # and strip those calls before importing to avoid double-execution.
     compile_only: bool      = bool(payload.get("compile_only", False))
+    check_only: bool        = bool(payload.get("check_only", False))
 
     source_config = _parse_emulator_config(source)
     import_source = _strip_emulator_calls(source) if source_config else source
@@ -64,7 +65,7 @@ def main() -> None:
     try:
         tmpfile.write(import_source)
         tmpfile.close()
-        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate, source_config, compile_only, stdout_holder)
+        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate, source_config, compile_only, stdout_holder, check_only)
     except Exception as exc:
         errors = _parse_error(exc, source, traceback.format_exc(), filename)
         print(json.dumps({"status": "error", "errors": errors, "stdout": stdout_holder[0]}))
@@ -75,7 +76,7 @@ def main() -> None:
             pass
 
 
-def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001, source_config: dict | None = None, compile_only: bool = False, stdout_holder: list | None = None) -> None:
+def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001, source_config: dict | None = None, compile_only: bool = False, stdout_holder: list | None = None, check_only: bool = False) -> None:
     from guppylang.defs import GuppyFunctionDefinition
 
     # Code-level emulator config takes precedence over UI-supplied parameters.
@@ -124,6 +125,12 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
             "qubit_count": 0,
             "stdout":      user_stdout,
         }))
+        return
+
+    # Linearity / type check only — call .check() and return without HUGR.
+    if check_only:
+        guppy_fn.check()  # raises GuppyError if any check fails
+        print(json.dumps({"status": "check_ok", "stdout": user_stdout}))
         return
 
     # Functions with qubit input parameters can't be run by the emulator without

@@ -34,7 +34,16 @@ async def run_endpoint(req: RunRequest, http_req: Request) -> RunResponse:
         error_rate=req.error_rate,
         version=req.version,
         compile_only=req.compile_only,
+        check_only=req.check_only,
     )
+
+    if result.check_passed:
+        logger.info("[%s] check_ok", request_id)
+        return RunResponse(
+            status=RunStatus.check_ok,
+            stdout=result.stdout,
+            request_id=request_id,
+        )
 
     if result.errors:
         logger.warning(

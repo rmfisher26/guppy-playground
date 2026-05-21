@@ -5,12 +5,23 @@ import { encodeShareUrl } from '../../lib/api';
 import { useMobile } from '../../lib/useMobile';
 import type { SimulatorBackend, NoiseModelKind } from '../../lib/types';
 
+type ActionKey = 'run' | 'check' | 'compile';
+
 export default function Toolbar() {
-  const { shots, setShots, simulator, setSimulator, noiseModel, setNoiseModel, errorRate, setErrorRate, guppyVersion, setGuppyVersion, availableVersions, runState, showToast } = usePlaygroundStore();
+  const { shots, setShots, simulator, setSimulator, noiseModel, setNoiseModel, errorRate, setErrorRate, guppyVersion, setGuppyVersion, availableVersions, runState, showToast, source } = usePlaygroundStore();
   const isMobile = useMobile();
-  const { run, compile } = useRun();
+  const { run, compile, check } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
-  const isCompileOnly = runState.status === 'compiling' && runState.compileOnly;
+  const canRun = !/\.compile(?:_function)?\s*\(/.test(source);
+
+  const [activeAction, setActiveAction] = useState<ActionKey>('run');
+  const ACTIONS: Record<ActionKey, { label: string; icon: React.ReactNode; fn: () => void; needsCanRun: boolean }> = {
+    run:     { label: 'Run',             icon: <PlayIcon />,    fn: run,     needsCanRun: true  },
+    check:   { label: 'Linearity Check', icon: <CheckIcon />,   fn: check,   needsCanRun: false },
+    compile: { label: 'Compile',         icon: <CompileIcon />, fn: compile, needsCanRun: false },
+  };
+  const action = ACTIONS[activeAction];
+  const isDisabled = isRunning || (action.needsCanRun && !canRun);
 
   function handleShare() {
     const { source, shots, simulator, noiseModel, errorRate, guppyVersion } = usePlaygroundStore.getState();
@@ -98,44 +109,30 @@ export default function Toolbar() {
         height: 'var(--toolbar-h)', display: 'flex',
         alignItems: 'center', padding: '0 12px', gap: 8,
       }}>
-        {/* Compile button */}
-        <button
-          style={{
-            ...btnBase,
-            background: 'transparent',
-            color: isRunning ? 'var(--text-muted)' : 'var(--text-secondary)',
-            border: `1px solid ${isRunning ? 'var(--border)' : 'var(--border-bright)'}`,
-            cursor: isRunning ? 'not-allowed' : 'pointer',
-            opacity: isRunning ? 0.6 : 1,
-          }}
-          onClick={() => !isRunning && compile()}
-          title="Compile to HUGR (Ctrl+Shift+Enter)"
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (!isRunning) { const el = e.currentTarget; el.style.borderColor = 'var(--teal)'; el.style.color = 'var(--text-primary)'; } }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (!isRunning) { const el = e.currentTarget; el.style.borderColor = 'var(--border-bright)'; el.style.color = 'var(--text-secondary)'; } }}
-        >
-          {isCompileOnly
-            ? <><Spinner /> Compiling…</>
-            : <><CompileIcon /> Compile</>
-          }
-        </button>
-
-        {/* Run button */}
-        <button
-          style={{
-            ...btnBase,
-            background: isRunning ? 'var(--teal-dim)' : 'var(--teal)',
-            color: 'var(--navy)', fontWeight: 600, padding: '0 16px',
-            cursor: isRunning ? 'not-allowed' : 'pointer',
-            opacity: isRunning ? 0.85 : 1,
-          }}
-          onClick={() => !isRunning && run()}
-          title="Run (Ctrl+Enter)"
-        >
-          {isRunning && !isCompileOnly
-            ? <><Spinner /> Running…</>
-            : <><PlayIcon /> Run</>
-          }
-        </button>
+        {/* Run split-button */}
+        <div style={{ display: 'flex', alignItems: 'stretch' }}>
+          <button
+            style={{
+              ...btnBase,
+              borderRadius: 'var(--radius-sm) 0 0 var(--radius-sm)',
+              background: isDisabled ? 'var(--teal-dim)' : 'var(--teal)',
+              color: isDisabled ? 'var(--text-muted)' : 'var(--navy)', fontWeight: 600, padding: '0 14px',
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              opacity: isDisabled ? 0.5 : 1,
+            }}
+            onClick={() => !isDisabled && action.fn()}
+            title={action.needsCanRun && !canRun ? 'This program compiles to HUGR only — use Compile' : undefined}
+          >
+            {isRunning
+              ? <><Spinner /> {{ run: 'Running…', check: 'Checking…', compile: 'Compiling…' }[activeAction as ActionKey]}</>
+              : <>{action.icon} {action.label}</>
+            }
+          </button>
+          <RunActionMenu
+            isRunning={isRunning} canRun={canRun}
+            activeAction={activeAction} onActionSelect={setActiveAction}
+          />
+        </div>
 
         <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
 
@@ -427,12 +424,155 @@ function DropdownOption({ label, tag, suffix, active, onClick }: {
   );
 }
 
-function ChevronIcon({ open }: { open: boolean }) {
+// ── Run action menu ───────────────────────────────────────────────────────────
+
+function RunActionMenu({ isRunning, canRun, activeAction, onActionSelect }: {
+  isRunning: boolean;
+  canRun: boolean;
+  activeAction: ActionKey;
+  onActionSelect: (k: ActionKey) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const actions: { icon: React.ReactNode; title: string; description: string; code?: string; onClick: () => void; disabled: boolean }[] = [
+    {
+      icon: <PlayIcon />,
+      title: 'Run',
+      description: 'Compile and simulate on the quantum emulator using the shots and simulator settings. View measurement counts in the Results tab.',
+      code: 'main.emulator(n_shots).run()',
+      onClick: () => { onActionSelect('run'); setOpen(false); },
+      disabled: !canRun || isRunning,
+    },
+    {
+      icon: <CompileIcon />,
+      title: 'Compile to HUGR',
+      description: 'Compile to the HUGR quantum intermediate representation and inspect in the HUGR tab.',
+      code: 'main.compile()  /  fn.compile_function()',
+      onClick: () => { onActionSelect('compile'); setOpen(false); },
+      disabled: isRunning,
+    },
+    {
+      icon: <CheckIcon />,
+      title: 'Linearity Check',
+      description: 'Type-check the program for qubit linearity violations — each qubit must be used exactly once with no leaks or double-use. No simulation runs.',
+      code: 'main.check()',
+      onClick: () => { onActionSelect('check'); setOpen(false); },
+      disabled: isRunning,
+    },
+  ];
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          height: 28, width: 22, padding: 0,
+          borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
+          background: open ? 'color-mix(in srgb, var(--teal) 80%, #000)' : 'var(--teal)',
+          borderLeft: '1px solid rgba(0,0,0,0.2)',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+        title="Show run options"
+      >
+        <ChevronIcon open={open} color="#fff" />
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+          background: 'var(--bg-raised)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+          zIndex: 300, width: 300,
+          animation: 'fadeSlideIn 0.1s ease',
+        }}>
+          {actions.map((action, i) => (
+            <ActionRow
+              key={action.title}
+              icon={action.icon}
+              title={action.title}
+              description={action.description}
+              code={action.code}
+              disabled={action.disabled}
+              onClick={action.onClick}
+              isLast={i === actions.length - 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionRow({ icon, title, description, code, disabled, onClick, isLast }: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  code?: string;
+  disabled: boolean;
+  onClick: () => void;
+  isLast: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => !disabled && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: '100%', padding: '10px 14px',
+        background: hovered ? 'var(--bg-hover)' : 'transparent',
+        border: 'none',
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        textAlign: 'left',
+        opacity: disabled ? 0.38 : 1,
+        transition: 'background 0.1s',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <span style={{ color: 'var(--teal)', flexShrink: 0, display: 'flex' }}>{icon}</span>
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {title}
+        </span>
+      </div>
+      <p style={{ margin: 0, paddingLeft: 18, fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+        {description}
+      </p>
+      {code && (
+        <p style={{ margin: '5px 0 0', paddingLeft: 18, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--teal)', lineHeight: 1.4 }}>
+          {code}
+        </p>
+      )}
+    </button>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ open, color = 'var(--text-muted)' }: { open: boolean; color?: string }) {
   return (
     <svg
       width="10" height="10" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-      style={{ color: 'var(--text-muted)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+      style={{ color, flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
     >
       <polyline points="6 9 12 15 18 9" />
     </svg>

@@ -34,6 +34,7 @@ class WorkerResult:
     results: SimulationResults | None
     errors: list[CompileError] | None
     stdout: str | None
+    check_passed: bool = False
 
 WORKER = Path(__file__).parent / "_compile_worker.py"
 TIMEOUT = 60  # compile + simulate together; give generous budget
@@ -67,6 +68,7 @@ async def compile_and_simulate(
     error_rate: float = 0.001,
     version: str | None = None,
     compile_only: bool = False,
+    check_only: bool = False,
 ) -> WorkerResult:
     """Compile (and optionally simulate) a Guppy program in one sandboxed subprocess."""
     if version is not None and version not in SUPPORTED_VERSIONS:
@@ -93,6 +95,7 @@ async def compile_and_simulate(
             "error_rate":   error_rate,
             "version":      version,
             "compile_only": compile_only,
+            "check_only":   check_only,
         }),
         timeout=TIMEOUT,
     )
@@ -117,6 +120,9 @@ async def compile_and_simulate(
         return _err((result.stderr or result.stdout)[:400])
 
     user_stdout: str | None = data.get("stdout") or None
+
+    if data.get("status") == "check_ok":
+        return WorkerResult(compile=None, results=None, errors=None, stdout=user_stdout, check_passed=True)
 
     if data.get("status") == "error":
         return WorkerResult(
