@@ -39,8 +39,8 @@ export default function Toolbar() {
   };
 
   const simulatorOptions: SelectOption<SimulatorBackend>[] = [
-    { value: 'stabilizer',  label: 'Stabilizer',  tag: 'Stim'  },
-    { value: 'statevector', label: 'Statevector',  tag: 'QuEST' },
+    { value: 'stabilizer',  label: 'Stabilizer',  tag: 'Stim',  description: 'Clifford circuits only — fast, supports up to 50 qubits.' },
+    { value: 'statevector', label: 'Statevector',  tag: 'QuEST', description: 'Exact amplitudes, arbitrary gates — limited to 20 qubits.' },
   ];
 
   const versionOptions: SelectOption<string>[] = availableVersions.map(v => ({ value: v, label: v }));
@@ -52,10 +52,10 @@ export default function Toolbar() {
     { value: 8192, label: '8192' },
   ];
 
-  type NoiseOption = { value: NoiseModelKind | null; label: string };
+  type NoiseOption = { value: NoiseModelKind | null; label: string; description?: string };
   const noiseOptions: NoiseOption[] = [
-    { value: null,           label: 'Ideal'        },
-    { value: 'depolarizing', label: 'Depolarizing' },
+    { value: null,           label: 'Ideal',        description: 'Perfect gate fidelity — no noise applied.' },
+    { value: 'depolarizing', label: 'Depolarizing',  description: 'Uniform depolarizing channel on all gates and measurements.' },
   ];
 
   // Log-scale slider: range 0–100 maps to p in [1e-4, 0.1]
@@ -222,7 +222,7 @@ function NoiseSelect<T extends string | null>({
 }: {
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; description?: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -267,13 +267,14 @@ function NoiseSelect<T extends string | null>({
           position: 'absolute', top: 'calc(100% + 4px)', right: 0,
           background: 'var(--bg-raised)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-          zIndex: 200, overflow: 'hidden', minWidth: '100%',
+          zIndex: 200, overflow: 'hidden', minWidth: 220,
           animation: 'fadeSlideIn 0.1s ease',
         }}>
           {options.map(opt => (
             <DropdownOption
               key={String(opt.value)}
               label={opt.label}
+              description={opt.description}
               active={opt.value === value}
               onClick={() => { onChange(opt.value); setOpen(false); }}
             />
@@ -286,7 +287,7 @@ function NoiseSelect<T extends string | null>({
 
 // ── Custom select ─────────────────────────────────────────────────────────────
 
-type SelectOption<T> = { value: T; label: string; tag?: string };
+type SelectOption<T> = { value: T; label: string; tag?: string; description?: string };
 
 function CustomSelect<T extends string | number>({
   value, onChange, options, suffix,
@@ -358,7 +359,7 @@ function CustomSelect<T extends string | number>({
           boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
           zIndex: 200,
           overflow: 'hidden',
-          minWidth: '100%',
+          minWidth: options.some(o => o.description) ? 220 : '100%',
           animation: 'fadeSlideIn 0.1s ease',
         }}>
           {options.map(opt => (
@@ -367,6 +368,7 @@ function CustomSelect<T extends string | number>({
               label={opt.label}
               tag={opt.tag}
               suffix={!opt.tag ? suffix : undefined}
+              description={opt.description}
               active={opt.value === value}
               onClick={() => { onChange(opt.value); setOpen(false); }}
             />
@@ -377,8 +379,8 @@ function CustomSelect<T extends string | number>({
   );
 }
 
-function DropdownOption({ label, tag, suffix, active, onClick }: {
-  label: string; tag?: string; suffix?: string; active: boolean; onClick: () => void;
+function DropdownOption({ label, tag, suffix, description, active, onClick }: {
+  label: string; tag?: string; suffix?: string; description?: string; active: boolean; onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -387,37 +389,47 @@ function DropdownOption({ label, tag, suffix, active, onClick }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        width: '100%', padding: '6px 12px 6px 10px',
+        width: '100%', padding: description ? '7px 12px 7px 10px' : '6px 12px 6px 10px',
         background: active ? 'var(--teal-subtle)' : hovered ? 'var(--bg-hover)' : 'transparent',
         border: 'none', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', gap: 7,
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
         textAlign: 'left',
         borderLeft: `2px solid ${active ? 'var(--teal)' : 'transparent'}`,
         transition: 'background 0.1s',
       }}
     >
-      <span style={{
-        fontFamily: 'var(--font-ui)', fontSize: 12,
-        fontWeight: active ? 500 : 400,
-        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-        flex: 1,
-      }}>
-        {label}
-      </span>
-      {tag && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, width: '100%' }}>
         <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 10,
-          color: active ? 'var(--text-teal)' : 'var(--text-muted)',
-          background: active ? 'var(--teal-subtle)' : 'var(--bg-base)',
-          border: `1px solid ${active ? 'var(--teal-dim)' : 'var(--border)'}`,
-          borderRadius: 3, padding: '1px 4px', lineHeight: 1.4,
+          fontFamily: 'var(--font-ui)', fontSize: 12,
+          fontWeight: active ? 500 : 400,
+          color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+          flex: 1,
         }}>
-          {tag}
+          {label}
         </span>
-      )}
-      {!tag && suffix && (
-        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--text-muted)' }}>
-          {suffix}
+        {tag && (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10,
+            color: active ? 'var(--text-teal)' : 'var(--text-muted)',
+            background: active ? 'var(--teal-subtle)' : 'var(--bg-base)',
+            border: `1px solid ${active ? 'var(--teal-dim)' : 'var(--border)'}`,
+            borderRadius: 3, padding: '1px 4px', lineHeight: 1.4,
+          }}>
+            {tag}
+          </span>
+        )}
+        {!tag && suffix && (
+          <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--text-muted)' }}>
+            {suffix}
+          </span>
+        )}
+      </div>
+      {description && (
+        <span style={{
+          fontFamily: 'var(--font-ui)', fontSize: 10,
+          color: 'var(--text-muted)', lineHeight: 1.4,
+        }}>
+          {description}
         </span>
       )}
     </button>
