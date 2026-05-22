@@ -133,9 +133,10 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         print(json.dumps({"status": "check_ok", "stdout": user_stdout}))
         return
 
-    # Functions with qubit input parameters can't be run by the emulator without
-    # a wrapper main(). Auto-switch to compile-only so type-check programs work.
-    if not compile_only and guppy_fn_name != "main" and _has_qubit_params(source, guppy_fn_name or ""):
+    # Only a function named "main" can be run by the emulator — guppylang requires
+    # the module entrypoint to be called main. Any other function name must use
+    # compile_function() for HUGR and cannot be simulated directly.
+    if not compile_only and guppy_fn_name != "main":
         compile_only = True
 
     n_qubits = (source_config.get("n_qubits") if source_config else None) or _infer_qubit_count(source)
@@ -150,13 +151,12 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
         raise ValueError(f"{n_qubits} qubits exceeds playground limit of {MAX_QUBITS_STABILIZER}.")
 
     # Compile HUGR for display panel.
-    # Functions with parameters (qubit or otherwise) must use compile_function();
-    # parameter-free functions (entrypoints) use compile().
+    # compile() is only valid for the module entrypoint (must be named "main").
+    # All other functions — regardless of whether they have params — use compile_function().
     hugr_nodes: list[dict] = []
     hugr_json: dict | None = None
-    fn_has_params = _fn_has_any_params(source, guppy_fn_name or "")
     try:
-        pkg = guppy_fn.compile_function() if fn_has_params else guppy_fn.compile()
+        pkg = guppy_fn.compile() if guppy_fn_name == "main" else guppy_fn.compile_function()
         hugr_str = pkg.to_str()
         try:
             json_start = hugr_str.index('{')

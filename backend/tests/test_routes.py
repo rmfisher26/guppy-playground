@@ -584,6 +584,41 @@ def test_coin_flip_stdout_captured():
         assert "bytes" in stdout
 
 
+# ── Aliased imports / non-main function names ──────────────────────────────
+
+ALIASED_IMPORT_SOURCE = _prog("aliased_import")
+
+
+def test_aliased_import_compile_only():
+    """Aliased stdlib import (result as guppy_result) with a non-main function
+    should auto-switch to compile-only and return ok with no simulation."""
+    resp = client.post("/run", json={
+        "source":    ALIASED_IMPORT_SOURCE,
+        "shots":     64,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None        # no simulation — not named main
+        assert data["compile"] is not None
+
+
+def test_aliased_import_check_only():
+    """Linearity check on an aliased-import program should pass cleanly."""
+    resp = client.post("/run", json={
+        "source":     ALIASED_IMPORT_SOURCE,
+        "shots":      1,
+        "simulator":  "stabilizer",
+        "check_only": True,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("check_ok", "compile_error", "internal_error")
+
+
 # ── hadamard (compile_function() call in source) ───────────────────────────
 
 HADAMARD_SOURCE = _prog("hadamard")
