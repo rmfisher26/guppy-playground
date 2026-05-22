@@ -213,11 +213,15 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
 
     # Noisy simulation — only supported on stabilizer backend
     noisy_counts: dict[str, int] | None = None
-    if noise_model == "depolarizing":
+    if noise_model in ("depolarizing", "leakage"):
         try:
-            from selene_sim import DepolarizingErrorModel
             p = max(0.0, min(1.0, error_rate))
-            error_model_obj = DepolarizingErrorModel(p_1q=p, p_2q=p, p_meas=p, p_init=p)
+            if noise_model == "depolarizing":
+                from selene_sim import DepolarizingErrorModel
+                error_model_obj = DepolarizingErrorModel(p_1q=p, p_2q=p, p_meas=p, p_init=p)
+            else:  # leakage
+                from selene_sim import SimpleLeakageErrorModel
+                error_model_obj = SimpleLeakageErrorModel(p_leak=p)
             noisy_em = (
                 guppy_fn.emulator(n_qubits=n_qubits)
                 .with_shots(shots)

@@ -12,6 +12,7 @@ class SimulatorBackend(str, Enum):
 
 class NoiseModelKind(str, Enum):
     depolarizing = "depolarizing"
+    leakage      = "leakage"
 
 
 class RunRequest(BaseModel):

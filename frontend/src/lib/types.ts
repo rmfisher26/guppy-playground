@@ -1,7 +1,7 @@
 // ── API TYPES ──────────────────────────────────────────────────────────────
 
 export type SimulatorBackend = 'stabilizer' | 'statevector';
-export type NoiseModelKind = 'depolarizing';
+export type NoiseModelKind = 'depolarizing' | 'leakage';
 
 export interface RunRequest {
   source: string;

@@ -52,10 +52,16 @@ export default function Toolbar() {
     { value: 8192, label: '8192' },
   ];
 
-  type NoiseOption = { value: NoiseModelKind | null; label: string; description?: string };
+  type NoiseOption = { value: NoiseModelKind | null; label: string; description?: string; code?: string };
   const noiseOptions: NoiseOption[] = [
-    { value: null,           label: 'Ideal',        description: 'Perfect gate fidelity — no noise applied.' },
-    { value: 'depolarizing', label: 'Depolarizing',  description: 'Uniform depolarizing channel on all gates and measurements.' },
+    { value: null,           label: 'Ideal',
+      description: 'Perfect gate fidelity — no noise applied.' },
+    { value: 'depolarizing', label: 'Depolarizing',
+      description: 'Uniform depolarizing channel on all gates and measurements.',
+      code: 'DepolarizingErrorModel(p_1q=p, p_2q=p, p_meas=p, p_init=p)' },
+    { value: 'leakage',      label: 'Leakage',
+      description: 'Qubits may leak to an auxiliary state on single- and two-qubit gates.',
+      code: 'SimpleLeakageErrorModel(p_leak=p)' },
   ];
 
   // Log-scale slider: range 0–100 maps to p in [1e-4, 0.1]
@@ -222,7 +228,7 @@ function NoiseSelect<T extends string | null>({
 }: {
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: string; description?: string }[];
+  options: { value: T; label: string; description?: string; code?: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -267,7 +273,7 @@ function NoiseSelect<T extends string | null>({
           position: 'absolute', top: 'calc(100% + 4px)', right: 0,
           background: 'var(--bg-raised)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-          zIndex: 200, overflow: 'hidden', minWidth: 220,
+          zIndex: 200, overflow: 'hidden', minWidth: 320,
           animation: 'fadeSlideIn 0.1s ease',
         }}>
           {options.map(opt => (
@@ -275,6 +281,7 @@ function NoiseSelect<T extends string | null>({
               key={String(opt.value)}
               label={opt.label}
               description={opt.description}
+              code={opt.code}
               active={opt.value === value}
               onClick={() => { onChange(opt.value); setOpen(false); }}
             />
@@ -379,8 +386,8 @@ function CustomSelect<T extends string | number>({
   );
 }
 
-function DropdownOption({ label, tag, suffix, description, active, onClick }: {
-  label: string; tag?: string; suffix?: string; description?: string; active: boolean; onClick: () => void;
+function DropdownOption({ label, tag, suffix, description, code, active, onClick }: {
+  label: string; tag?: string; suffix?: string; description?: string; code?: string; active: boolean; onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -430,6 +437,14 @@ function DropdownOption({ label, tag, suffix, description, active, onClick }: {
           color: 'var(--text-muted)', lineHeight: 1.4,
         }}>
           {description}
+        </span>
+      )}
+      {code && (
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10,
+          color: 'var(--teal)', lineHeight: 1.4,
+        }}>
+          {code}
         </span>
       )}
     </button>
