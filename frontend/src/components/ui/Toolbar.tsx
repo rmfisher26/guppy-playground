@@ -233,6 +233,7 @@ function NoiseSelect<T extends string | null>({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const isNoisy = value !== null;
+  const isMobile = useMobile();
 
   useEffect(() => {
     if (!open) return;
@@ -244,6 +245,15 @@ function NoiseSelect<T extends string | null>({
   }, [open]);
 
   const current = options.find(o => o.value === value);
+
+  // On desktop the trigger is near the right edge of the toolbar — anchor the
+  // dropdown's right edge to the trigger's right edge (right: 0).
+  // On mobile the trigger is near the LEFT edge of the toolbar row — anchoring
+  // right: 0 would push a 320px panel off the left side of the viewport.
+  // Instead anchor left: 0 and cap width to the usable viewport width.
+  const dropdownPositionStyle = isMobile
+    ? { left: 0, right: 'auto', maxWidth: 'calc(100vw - 24px)' }
+    : { right: 0, left: 'auto', minWidth: 320 };
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -270,10 +280,11 @@ function NoiseSelect<T extends string | null>({
       </button>
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', right: 0,
+          position: 'absolute', top: 'calc(100% + 4px)',
+          ...dropdownPositionStyle,
           background: 'var(--bg-raised)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-          zIndex: 200, overflow: 'hidden', minWidth: 320,
+          zIndex: 200, overflow: 'hidden',
           animation: 'fadeSlideIn 0.1s ease',
         }}>
           {options.map(opt => (
@@ -443,6 +454,8 @@ function DropdownOption({ label, tag, suffix, description, code, active, onClick
         <span style={{
           fontFamily: 'var(--font-mono)', fontSize: 10,
           color: 'var(--teal)', lineHeight: 1.4,
+          display: 'block', width: '100%',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {code}
         </span>
