@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { usePlaygroundStore } from '../../lib/store';
+import type { DepolarizingParams } from '../../lib/store';
 import { useRun } from '../hooks/useRun';
 import { encodeShareUrl } from '../../lib/api';
 import { useMobile } from '../../lib/useMobile';
@@ -8,7 +9,12 @@ import type { SimulatorBackend, NoiseModelKind } from '../../lib/types';
 type ActionKey = 'run' | 'check' | 'compile';
 
 export default function Toolbar() {
-  const { shots, setShots, simulator, setSimulator, noiseModel, setNoiseModel, errorRate, setErrorRate, guppyVersion, setGuppyVersion, availableVersions, runState, showToast, source } = usePlaygroundStore();
+  const {
+    shots, setShots, simulator, setSimulator,
+    noiseModel, setNoiseModel, errorRate, setErrorRate,
+    depolarizingMode, setDepolarizingMode, depolarizingParams, setDepolarizingParams,
+    guppyVersion, setGuppyVersion, availableVersions, runState, showToast, source,
+  } = usePlaygroundStore();
   const isMobile = useMobile();
   const { run, compile, check } = useRun();
   const isRunning = runState.status === 'compiling' || runState.status === 'simulating';
@@ -71,6 +77,33 @@ export default function Toolbar() {
     ? `${(p * 10000).toFixed(1)}×10⁻⁴`
     : `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}%`;
 
+  const isCustomDepolarizing = noiseModel === 'depolarizing' && depolarizingMode === 'custom';
+
+  function switchToCustom() {
+    // Seed each channel from the current linked rate for continuity
+    setDepolarizingParams({ p_1q: errorRate, p_2q: errorRate, p_meas: errorRate, p_init: errorRate });
+    setDepolarizingMode('custom');
+  }
+  function switchToLinked() {
+    setDepolarizingMode('linked');
+  }
+
+  // Linked-mode single slider (shared by desktop inline + mobile row)
+  const linkedSlider = (flex: number | string) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex }}>
+      <input
+        type="range" min={0} max={100}
+        value={rateToSlider(errorRate)}
+        onChange={e => setErrorRate(sliderToRate(Number(e.target.value)))}
+        style={{ flex: 1, minWidth: 0, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
+        title={`Error rate p = ${fmtRate(errorRate)}`}
+      />
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--amber, #f59e0b)', minWidth: 40, textAlign: 'right' }}>
+        {fmtRate(errorRate)}
+      </span>
+    </div>
+  );
+
   const noiseRow = (
     <div style={{
       height: 36, display: 'flex', alignItems: 'center',
@@ -82,24 +115,14 @@ export default function Toolbar() {
         onChange={v => setNoiseModel(v)}
         options={noiseOptions}
       />
-      {noiseModel && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={rateToSlider(errorRate)}
-            onChange={e => setErrorRate(sliderToRate(Number(e.target.value)))}
-            style={{ flex: 1, minWidth: 0, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
-            title={`Error rate p = ${fmtRate(errorRate)}`}
-          />
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            color: 'var(--amber, #f59e0b)', minWidth: 40, textAlign: 'right',
-          }}>
-            {fmtRate(errorRate)}
-          </span>
-        </div>
+      {/* Linked mode: single slider + Custom toggle */}
+      {noiseModel && !isCustomDepolarizing && linkedSlider(1)}
+      {noiseModel === 'depolarizing' && !isCustomDepolarizing && (
+        <ModeToggleButton label="Custom" onClick={switchToCustom} />
+      )}
+      {/* Custom mode: Linked button only (params are in the row below) */}
+      {isCustomDepolarizing && (
+        <ModeToggleButton label="← Linked" onClick={switchToLinked} />
       )}
     </div>
   );
@@ -173,31 +196,28 @@ export default function Toolbar() {
         {!isMobile && (
           <>
             <div style={{ width: 1, height: 16, background: 'var(--border-bright)', flexShrink: 0 }} />
-
-            <NoiseSelect
-              value={noiseModel}
-              onChange={v => setNoiseModel(v)}
-              options={noiseOptions}
-            />
-
-            {noiseModel && (
+            <NoiseSelect value={noiseModel} onChange={v => setNoiseModel(v)} options={noiseOptions} />
+            {/* Linked mode: single slider + Custom toggle (depolarizing only) */}
+            {noiseModel && !isCustomDepolarizing && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
-                  type="range"
-                  min={0}
-                  max={100}
+                  type="range" min={0} max={100}
                   value={rateToSlider(errorRate)}
                   onChange={e => setErrorRate(sliderToRate(Number(e.target.value)))}
                   style={{ width: 88, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
                   title={`Error rate p = ${fmtRate(errorRate)}`}
                 />
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 11,
-                  color: 'var(--amber, #f59e0b)', minWidth: 36,
-                }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--amber, #f59e0b)', minWidth: 36 }}>
                   {fmtRate(errorRate)}
                 </span>
               </div>
+            )}
+            {noiseModel === 'depolarizing' && !isCustomDepolarizing && (
+              <ModeToggleButton label="Custom" onClick={switchToCustom} />
+            )}
+            {/* Custom mode: Linked button; params appear in the row below */}
+            {isCustomDepolarizing && (
+              <ModeToggleButton label="← Linked" onClick={switchToLinked} />
             )}
           </>
         )}
@@ -217,6 +237,94 @@ export default function Toolbar() {
 
       {/* Mobile-only second row: noise model + slider */}
       {isMobile && noiseRow}
+
+      {/* Custom depolarizing params — shown below the toolbar on both desktop and mobile */}
+      {isCustomDepolarizing && (
+        <ParamsBar
+          params={depolarizingParams}
+          onChange={setDepolarizingParams}
+          fmtRate={fmtRate}
+          sliderToRate={sliderToRate}
+          rateToSlider={rateToSlider}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Mode toggle button (Custom / ← Linked) ───────────────────────────────────
+
+function ModeToggleButton({ label, onClick }: { label: string; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        height: 22, padding: '0 8px',
+        border: `1px solid ${hovered ? '#f59e0b' : 'var(--border)'}`,
+        borderRadius: 'var(--radius-sm)',
+        background: hovered ? 'color-mix(in srgb, #f59e0b 10%, var(--bg-raised))' : 'transparent',
+        cursor: 'pointer', whiteSpace: 'nowrap',
+        fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 500,
+        color: '#f59e0b',
+        transition: 'border-color 0.15s, background 0.15s',
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ── Custom depolarizing params bar ────────────────────────────────────────────
+
+const PARAM_DEFS: { key: keyof DepolarizingParams; label: string; title: string }[] = [
+  { key: 'p_1q',   label: '1Q',   title: 'Single-qubit gate error rate' },
+  { key: 'p_2q',   label: '2Q',   title: 'Two-qubit gate error rate' },
+  { key: 'p_meas', label: 'Meas', title: 'Measurement error rate' },
+  { key: 'p_init', label: 'Init', title: 'State preparation error rate' },
+];
+
+function ParamsBar({ params, onChange, fmtRate, sliderToRate, rateToSlider }: {
+  params: DepolarizingParams;
+  onChange: (p: DepolarizingParams) => void;
+  fmtRate: (p: number) => string;
+  sliderToRate: (t: number) => number;
+  rateToSlider: (p: number) => number;
+}) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      columnGap: 12,
+      padding: '4px 12px 6px',
+      borderTop: '1px solid var(--border)',
+    }}>
+      {PARAM_DEFS.map(({ key, label, title }) => (
+        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, height: 26 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10,
+            color: 'var(--text-muted)', minWidth: 30, textAlign: 'right',
+          }}>
+            {label}
+          </span>
+          <input
+            type="range" min={0} max={100}
+            value={rateToSlider(params[key])}
+            onChange={e => onChange({ ...params, [key]: sliderToRate(Number(e.target.value)) })}
+            style={{ flex: 1, minWidth: 0, accentColor: 'var(--amber, #f59e0b)', cursor: 'pointer' }}
+            title={`${title}: p = ${fmtRate(params[key])}`}
+          />
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            color: 'var(--amber, #f59e0b)', minWidth: 40, textAlign: 'right',
+          }}>
+            {fmtRate(params[key])}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

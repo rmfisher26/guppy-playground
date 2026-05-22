@@ -24,6 +24,11 @@ class RunRequest(BaseModel):
     seed:         int | None = None
     noise_model:  NoiseModelKind | None = None
     error_rate:   float = Field(0.001, ge=0.0, le=1.0)
+    # Per-channel depolarizing params — when present these override the uniform error_rate
+    depolarizing_p_1q:   float | None = Field(None, ge=0.0, le=1.0)
+    depolarizing_p_2q:   float | None = Field(None, ge=0.0, le=1.0)
+    depolarizing_p_meas: float | None = Field(None, ge=0.0, le=1.0)
+    depolarizing_p_init: float | None = Field(None, ge=0.0, le=1.0)
     version:      str | None = None       # guppylang version; None → server default
     compile_only: bool = False            # compile to HUGR only, skip simulation
     check_only:   bool = False            # type/linearity check only, no HUGR

@@ -12,6 +12,11 @@ export interface RunRequest {
   seed?: number;
   noise_model?: NoiseModelKind;
   error_rate?: number;
+  // Per-channel depolarizing params — when set these override the uniform error_rate
+  depolarizing_p_1q?: number;
+  depolarizing_p_2q?: number;
+  depolarizing_p_meas?: number;
+  depolarizing_p_init?: number;
   version?: string;             // guppylang version; omit for server default
   compile_only?: boolean;       // compile to HUGR only, skip simulation
   check_only?: boolean;         // type/linearity check only, no HUGR

@@ -20,7 +20,9 @@ export function useRun() {
   }
 
   async function run() {
-    const { source, shots, simulator, seed, noiseModel, errorRate, guppyVersion, activeSlot, examples, setRunState, setActiveTab, setSimulator } =
+    const { source, shots, simulator, seed, noiseModel, errorRate,
+            depolarizingMode, depolarizingParams,
+            guppyVersion, activeSlot, examples, setRunState, setActiveTab, setSimulator } =
       usePlaygroundStore.getState();
 
     if (isRunning()) return;
@@ -41,9 +43,20 @@ export function useRun() {
     if (effectiveSimulator !== simulator) setSimulator(effectiveSimulator);
 
     try {
+      const noisePayload = noiseModel
+        ? noiseModel === 'depolarizing' && depolarizingMode === 'custom'
+          ? {
+              noise_model:          noiseModel,
+              depolarizing_p_1q:   depolarizingParams.p_1q,
+              depolarizing_p_2q:   depolarizingParams.p_2q,
+              depolarizing_p_meas: depolarizingParams.p_meas,
+              depolarizing_p_init: depolarizingParams.p_init,
+            }
+          : { noise_model: noiseModel, error_rate: errorRate }
+        : {};
       const response = await apiRun({
         source, filename, shots, simulator: effectiveSimulator, seed,
-        ...(noiseModel ? { noise_model: noiseModel, error_rate: errorRate } : {}),
+        ...noisePayload,
         ...(guppyVersion ? { version: guppyVersion } : {}),
       });
       const elapsed_ms = Math.round(performance.now() - start);

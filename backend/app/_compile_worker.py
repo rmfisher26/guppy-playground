@@ -45,6 +45,11 @@ def main() -> None:
     # and strip those calls before importing to avoid double-execution.
     compile_only: bool      = bool(payload.get("compile_only", False))
     check_only: bool        = bool(payload.get("check_only", False))
+    # Per-channel depolarizing params (None means fall back to uniform error_rate)
+    depolarizing_p_1q:   float | None = payload.get("depolarizing_p_1q")
+    depolarizing_p_2q:   float | None = payload.get("depolarizing_p_2q")
+    depolarizing_p_meas: float | None = payload.get("depolarizing_p_meas")
+    depolarizing_p_init: float | None = payload.get("depolarizing_p_init")
 
     source_config = _parse_emulator_config(source)
     import_source = _strip_emulator_calls(source) if source_config else source
@@ -65,7 +70,9 @@ def main() -> None:
     try:
         tmpfile.write(import_source)
         tmpfile.close()
-        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate, source_config, compile_only, stdout_holder, check_only)
+        _run(tmppath, source, shots, simulator, seed, noise_model, error_rate,
+             depolarizing_p_1q, depolarizing_p_2q, depolarizing_p_meas, depolarizing_p_init,
+             source_config, compile_only, stdout_holder, check_only)
     except Exception as exc:
         errors = _parse_error(exc, source, traceback.format_exc(), filename)
         print(json.dumps({"status": "error", "errors": errors, "stdout": stdout_holder[0]}))
@@ -76,7 +83,14 @@ def main() -> None:
             pass
 
 
-def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None, noise_model: str | None = None, error_rate: float = 0.001, source_config: dict | None = None, compile_only: bool = False, stdout_holder: list | None = None, check_only: bool = False) -> None:
+def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None,
+         noise_model: str | None = None, error_rate: float = 0.001,
+         depolarizing_p_1q:   float | None = None,
+         depolarizing_p_2q:   float | None = None,
+         depolarizing_p_meas: float | None = None,
+         depolarizing_p_init: float | None = None,
+         source_config: dict | None = None, compile_only: bool = False,
+         stdout_holder: list | None = None, check_only: bool = False) -> None:
     from guppylang.defs import GuppyFunctionDefinition
 
     # Code-level emulator config takes precedence over UI-supplied parameters.
@@ -218,7 +232,13 @@ def _run(tmppath: str, source: str, shots: int, simulator: str, seed: int | None
             p = max(0.0, min(1.0, error_rate))
             if noise_model == "depolarizing":
                 from selene_sim import DepolarizingErrorModel
-                error_model_obj = DepolarizingErrorModel(p_1q=p, p_2q=p, p_meas=p, p_init=p)
+                # Per-channel params override the uniform error_rate when provided
+                clamp = lambda v: max(0.0, min(1.0, float(v)))
+                q_1q   = clamp(depolarizing_p_1q   if depolarizing_p_1q   is not None else p)
+                q_2q   = clamp(depolarizing_p_2q   if depolarizing_p_2q   is not None else p)
+                q_meas = clamp(depolarizing_p_meas if depolarizing_p_meas is not None else p)
+                q_init = clamp(depolarizing_p_init if depolarizing_p_init is not None else p)
+                error_model_obj = DepolarizingErrorModel(p_1q=q_1q, p_2q=q_2q, p_meas=q_meas, p_init=q_init)
             else:  # leakage
                 from selene_sim import SimpleLeakageErrorModel
                 error_model_obj = SimpleLeakageErrorModel(p_leak=p)

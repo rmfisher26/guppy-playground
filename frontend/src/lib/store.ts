@@ -2,6 +2,17 @@ import { create } from 'zustand';
 import type { RunState, OutputTab, Example, CompileError, NoiseModelKind } from './types';
 import { DEFAULT_SOURCE } from './defaultSource';
 
+export type DepolarizingMode = 'linked' | 'custom';
+export interface DepolarizingParams {
+  p_1q:   number;
+  p_2q:   number;
+  p_meas: number;
+  p_init: number;
+}
+const DEFAULT_DEPOLARIZING_PARAMS: DepolarizingParams = {
+  p_1q: 0.001, p_2q: 0.005, p_meas: 0.005, p_init: 0.001,
+};
+
 export type Theme = 'dark' | 'light' | 'system';
 
 function loadTheme(): Theme {
@@ -49,6 +60,10 @@ interface PlaygroundStore {
   setNoiseModel: (m: NoiseModelKind | null) => void;
   errorRate: number;
   setErrorRate: (r: number) => void;
+  depolarizingMode: DepolarizingMode;
+  setDepolarizingMode: (m: DepolarizingMode) => void;
+  depolarizingParams: DepolarizingParams;
+  setDepolarizingParams: (p: DepolarizingParams) => void;
   guppyVersion: string;
   setGuppyVersion: (v: string) => void;
   availableVersions: string[];
@@ -112,6 +127,10 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   setNoiseModel: (noiseModel) => set({ noiseModel }),
   errorRate: 0.001,
   setErrorRate: (errorRate) => set({ errorRate }),
+  depolarizingMode: 'linked',
+  setDepolarizingMode: (depolarizingMode) => set({ depolarizingMode }),
+  depolarizingParams: DEFAULT_DEPOLARIZING_PARAMS,
+  setDepolarizingParams: (depolarizingParams) => set({ depolarizingParams }),
   guppyVersion: '',
   setGuppyVersion: (guppyVersion) => set({ guppyVersion }),
   availableVersions: [],
