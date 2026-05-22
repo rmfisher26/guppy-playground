@@ -10,5 +10,3 @@ def main() -> None:
     cx(q0, q1)
     result("m0", measure(q0))
     result("m1", measure(q1))
-
-main.check()

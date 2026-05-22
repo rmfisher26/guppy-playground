@@ -8,5 +8,3 @@ def main() -> tuple[bool, bool]:
     h(q0)
     cx(q0, q1)
     return measure(q0), measure(q1)
-
-main.check()

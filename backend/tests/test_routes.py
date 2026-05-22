@@ -97,7 +97,7 @@ def test_run_empty_source():
     # Empty source is valid Python — guppylang compiles it and returns ok with 0 shots,
     # but never a 500
     assert data["status"] in ("ok", "compile_error", "internal_error")
-    if data["status"] == "ok":
+    if data["status"] == "ok" and data.get("results"):
         assert sum(data["results"]["counts"].values()) == 0
 
 

@@ -10,5 +10,3 @@ def main() -> None:
         cx(qubits[i], qubits[i + 1])
     ms = measure_array(qubits)
     result("q", ms)
-
-main.check()
