@@ -298,7 +298,19 @@ def _extract_register_names(result) -> list[str] | None:
     try:
         reg_bits = result.results[0].to_register_bits()
     except Exception:
-        return None  # state_result() artifact paths confuse to_register_bits()
+        # state_result() artifact paths confuse to_register_bits(); read tags directly.
+        try:
+            names = [
+                tag for tag, v in result.results[0].entries
+                if not isinstance(v, str)  # skip state_result() file-path entries
+            ]
+        except Exception:
+            return None
+        if not names:
+            return None
+        if all(re.fullmatch(r"\d+", n.split("[")[0]) for n in names):
+            return None
+        return names or None
     if not reg_bits:
         return None
     names: list[str] = []

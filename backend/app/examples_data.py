@@ -190,7 +190,7 @@ def main() -> None:
 ''',
     ),
     Example(
-        id="state-debug",
+        id="bell-debug",
         title="Bell Pair Inspection",
         description="Use state_result() to inspect the quantum state mid-circuit. Guppy's equivalent of print() debugging.",
         tags=["debugging", "statevector"],
