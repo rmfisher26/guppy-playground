@@ -1,7 +1,7 @@
 // ── API TYPES ──────────────────────────────────────────────────────────────
 
 export type SimulatorBackend = 'stabilizer' | 'statevector';
-export type NoiseModelKind = 'depolarizing';
+export type NoiseModelKind = 'depolarizing' | 'leakage';
 
 export interface RunRequest {
   source: string;
@@ -12,7 +12,14 @@ export interface RunRequest {
   seed?: number;
   noise_model?: NoiseModelKind;
   error_rate?: number;
+  // Per-channel depolarizing params — when set these override the uniform error_rate
+  depolarizing_p_1q?: number;
+  depolarizing_p_2q?: number;
+  depolarizing_p_meas?: number;
+  depolarizing_p_init?: number;
   version?: string;             // guppylang version; omit for server default
+  compile_only?: boolean;       // compile to HUGR only, skip simulation
+  check_only?: boolean;         // type/linearity check only, no HUGR
 }
 
 export interface HugrNode {
@@ -70,7 +77,7 @@ export interface SimulationResults {
   state_snapshots?: StateSnapshot[][];  // [shot][call-order]
 }
 
-export type RunStatus = 'ok' | 'compile_error' | 'timeout' | 'rate_limited' | 'internal_error';
+export type RunStatus = 'ok' | 'check_ok' | 'compile_error' | 'timeout' | 'rate_limited' | 'internal_error';
 
 export interface RunResponse {
   status: RunStatus;
@@ -80,6 +87,7 @@ export interface RunResponse {
   message?: string;
   retry_after_ms?: number;
   request_id?: string;
+  stdout?: string;
 }
 
 export interface HealthResponse {
@@ -113,10 +121,11 @@ export interface VersionsResponse {
 export type RunState =
   | { status: 'idle' }
   | { status: 'preparing' }
-  | { status: 'compiling' }
+  | { status: 'compiling'; compileOnly?: boolean; checkOnly?: boolean }
   | { status: 'simulating' }
   | { status: 'success'; response: RunResponse; elapsed_ms: number; simulator: SimulatorBackend }
-  | { status: 'compile_error'; errors: CompileError[] }
+  | { status: 'check_success'; elapsed_ms: number }
+  | { status: 'compile_error'; errors: CompileError[]; stdout?: string }
   | { status: 'timeout' }
   | { status: 'rate_limited'; retry_after_ms: number }
   | { status: 'internal_error'; message: string };

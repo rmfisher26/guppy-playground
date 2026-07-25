@@ -183,9 +183,18 @@ export default function ResultsTab() {
             <BarChart data={chartData} layout="horizontal" margin={{ left: 8, right: 8, top: hasNoise ? 8 : 36, bottom: 4 }} barCategoryGap="25%">
               <XAxis
                 type="category" dataKey="basis"
-                tickFormatter={axisTickFormatter}
-                tick={{ fill: basisTickColor, fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 axisLine={false} tickLine={false}
+                tick={({ x, y, payload }: any) => (
+                  <text
+                    x={x} y={y + 14}
+                    textAnchor="middle"
+                    fill={basisTickColor}
+                    fontFamily="var(--font-mono)"
+                    fontSize={11}
+                  >
+                    {axisTickFormatter(payload.value)}
+                  </text>
+                )}
               />
               <YAxis type="number" hide domain={[0, Math.max(totalIdeal, totalNoisy || 0)]} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--teal-subtle)' }} />

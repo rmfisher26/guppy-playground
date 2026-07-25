@@ -19,7 +19,7 @@ EXAMPLES: list[Example] = [
         source='''\
 from guppylang import guppy
 from guppylang.std.quantum import qubit, h, cx, measure
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def main() -> None:
@@ -31,10 +31,8 @@ def main() -> None:
     q1 = qubit()
     h(q0)       # Superposition
     cx(q0, q1)  # Entangle
-    guppy_result("m0", measure(q0))
-    guppy_result("m1", measure(q1))
-
-main.check()
+    result("m0", measure(q0))
+    result("m1", measure(q1))
 ''',
     ),
     Example(
@@ -49,7 +47,7 @@ main.check()
 from guppylang import guppy
 from guppylang.std.builtins import owned
 from guppylang.std.quantum import cx, h, measure, qubit, x, z
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def teleport(src: qubit @ owned, tgt: qubit) -> None:
@@ -75,9 +73,7 @@ def main() -> None:
     tgt = qubit()
     h(src)              # Prepare src in |+⟩ — non-trivial state to teleport
     teleport(src, tgt)
-    guppy_result("tgt", measure(tgt))
-
-main.check()
+    result("tgt", measure(tgt))
 ''',
     ),
     Example(
@@ -92,7 +88,7 @@ main.check()
 from guppylang import guppy
 from guppylang.std.builtins import owned
 from guppylang.std.quantum import qubit, h, cx, x, measure
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def deutsch_balanced(q: qubit @ owned, anc: qubit @ owned) -> tuple[bool, bool]:
@@ -113,10 +109,8 @@ def main() -> None:
     x(anc)
     h(anc)
     res, anc_bit = deutsch_balanced(q, anc)
-    guppy_result("result", res)     # always 1 for balanced oracle
-    guppy_result("anc",    anc_bit)
-
-main.check()
+    result("result", res)     # always 1 for balanced oracle
+    result("anc",    anc_bit)
 ''',
     ),
     Example(
@@ -144,8 +138,6 @@ def main() -> None:
         cx(qubits[i], qubits[i + 1])
     ms = measure_array(qubits)
     result("q", ms)
-
-main.check()
 ''',
     ),
     Example(
@@ -159,7 +151,7 @@ main.check()
         source='''\
 from guppylang import guppy
 from guppylang.std.quantum import qubit, cx, x, measure
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def main() -> None:
@@ -192,15 +184,13 @@ def main() -> None:
     if not s0 and s1:
         x(q2)           # Error on qubit 2
 
-    guppy_result("q0", measure(q0))
-    guppy_result("q1", measure(q1))
-    guppy_result("q2", measure(q2))
-
-main.check()
+    result("q0", measure(q0))
+    result("q1", measure(q1))
+    result("q2", measure(q2))
 ''',
     ),
     Example(
-        id="state-debug",
+        id="bell-debug",
         title="Bell Pair Inspection",
         description="Use state_result() to inspect the quantum state mid-circuit. Guppy's equivalent of print() debugging.",
         tags=["debugging", "statevector"],
@@ -211,7 +201,7 @@ main.check()
 from guppylang import guppy
 from guppylang.std.quantum import qubit, h, cx, measure
 from guppylang.std.debug import state_result
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def main() -> None:
@@ -236,10 +226,8 @@ def main() -> None:
     cx(q0, q1)
     state_result("3. Bell state", q0, q1)    # (|00> + |11>)/sqrt(2) -- maximally entangled
 
-    guppy_result("m0", measure(q0))
-    guppy_result("m1", measure(q1))
-
-main.check()
+    result("m0", measure(q0))
+    result("m1", measure(q1))
 ''',
     ),
     Example(
@@ -297,8 +285,6 @@ def main() -> None:
     # tgt now holds the teleported |+> state
     state_result("4. After correction (tgt only)", tgt)
     result("tgt", measure(tgt))
-
-main.check()
 ''',
     ),
     Example(
@@ -342,8 +328,6 @@ def main() -> None:
     result("q0", measure(q0))
     result("q1", measure(q1))
     result("q2", measure(q2))
-
-main.check()
 ''',
     ),
     Example(
@@ -388,8 +372,6 @@ def main() -> None:
 
     result("result", measure(q))
     result("anc", measure(anc))
-
-main.check()
 ''',
     ),
     Example(
@@ -451,8 +433,6 @@ def main() -> None:
     result("q0", measure(q0))
     result("q1", measure(q1))
     result("q2", measure(q2))
-
-main.check()
 ''',
     ),
 ]

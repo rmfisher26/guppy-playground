@@ -32,38 +32,55 @@ async def run_endpoint(req: RunRequest, http_req: Request) -> RunResponse:
         filename=req.filename,
         noise_model=req.noise_model,
         error_rate=req.error_rate,
+        depolarizing_p_1q=req.depolarizing_p_1q,
+        depolarizing_p_2q=req.depolarizing_p_2q,
+        depolarizing_p_meas=req.depolarizing_p_meas,
+        depolarizing_p_init=req.depolarizing_p_init,
         version=req.version,
+        compile_only=req.compile_only,
+        check_only=req.check_only,
     )
 
-    if isinstance(result, list):
-        logger.warning(
-            "[%s] compile_error  errors=%d  first=%r",
-            request_id,
-            len(result),
-            result[0].message if result else "none",
-        )
+    if result.check_passed:
+        logger.info("[%s] check_ok", request_id)
         return RunResponse(
-            status=RunStatus.compile_error,
-            errors=result,
+            status=RunStatus.check_ok,
+            stdout=result.stdout,
             request_id=request_id,
         )
 
-    compile_ok, sim_ok = result
-    total_shots = sum(sim_ok.counts.values())
+    if result.errors:
+        logger.warning(
+            "[%s] compile_error  errors=%d  first=%r",
+            request_id,
+            len(result.errors),
+            result.errors[0].message if result.errors else "none",
+        )
+        return RunResponse(
+            status=RunStatus.compile_error,
+            errors=result.errors,
+            stdout=result.stdout,
+            request_id=request_id,
+        )
+
+    compile_ok = result.compile
+    sim_ok = result.results
+    total_shots = sum(sim_ok.counts.values()) if sim_ok else 0
 
     logger.info(
         "[%s] ok  nodes=%d  qubits=%d  shots=%d  outcomes=%d  ms=%d",
         request_id,
-        compile_ok.node_count,
-        compile_ok.qubit_count,
+        compile_ok.node_count if compile_ok else 0,
+        compile_ok.qubit_count if compile_ok else 0,
         total_shots,
-        len(sim_ok.counts),
-        compile_ok.compile_time_ms,
+        len(sim_ok.counts) if sim_ok else 0,
+        compile_ok.compile_time_ms if compile_ok else 0,
     )
 
     return RunResponse(
         status=RunStatus.ok,
         compile=compile_ok,
         results=sim_ok,
+        stdout=result.stdout,
         request_id=request_id,
     )

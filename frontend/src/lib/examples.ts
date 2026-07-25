@@ -14,7 +14,7 @@ export const FALLBACK_EXAMPLES: Example[] = [
     default_shots: 1024,
     source: `from guppylang import guppy
 from guppylang.std.quantum import qubit, h, cx, measure
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def main() -> None:
@@ -26,10 +26,9 @@ def main() -> None:
     q1 = qubit()
     h(q0)       # Superposition
     cx(q0, q1)  # Entangle
-    guppy_result("m0", measure(q0))
-    guppy_result("m1", measure(q1))
-
-main.check()`,
+    result("m0", measure(q0))
+    result("m1", measure(q1))
+`,
   },
   {
     id: 'teleport',
@@ -42,7 +41,7 @@ main.check()`,
     source: `from guppylang import guppy
 from guppylang.std.builtins import owned
 from guppylang.std.quantum import cx, h, measure, qubit, x, z
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def teleport(src: qubit @ owned, tgt: qubit) -> None:
@@ -68,9 +67,8 @@ def main() -> None:
     tgt = qubit()
     h(src)              # Prepare src in |+⟩ — non-trivial state to teleport
     teleport(src, tgt)
-    guppy_result("tgt", measure(tgt))
-
-main.check()`,
+    result("tgt", measure(tgt))
+`,
   },
   {
     id: 'deutsch',
@@ -83,7 +81,7 @@ main.check()`,
     source: `from guppylang import guppy
 from guppylang.std.builtins import owned
 from guppylang.std.quantum import qubit, h, cx, x, measure
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def deutsch_balanced(q: qubit @ owned, anc: qubit @ owned) -> tuple[bool, bool]:
@@ -104,10 +102,9 @@ def main() -> None:
     x(anc)
     h(anc)
     res, anc_bit = deutsch_balanced(q, anc)
-    guppy_result("result", res)     # always 1 for balanced oracle
-    guppy_result("anc",    anc_bit)
-
-main.check()`,
+    result("result", res)     # always 1 for balanced oracle
+    result("anc",    anc_bit)
+`,
   },
   {
     id: 'ghz',
@@ -133,8 +130,7 @@ def main() -> None:
         cx(qubits[i], qubits[i + 1])
     ms = measure_array(qubits)
     result("q", ms)
-
-main.check()`,
+`,
   },
   {
     id: 'qec',
@@ -146,7 +142,7 @@ main.check()`,
     default_shots: 1024,
     source: `from guppylang import guppy
 from guppylang.std.quantum import qubit, cx, x, measure
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def main() -> None:
@@ -179,14 +175,13 @@ def main() -> None:
     if not s0 and s1:
         x(q2)           # Error on qubit 2
 
-    guppy_result("q0", measure(q0))
-    guppy_result("q1", measure(q1))
-    guppy_result("q2", measure(q2))
-
-main.check()`,
+    result("q0", measure(q0))
+    result("q1", measure(q1))
+    result("q2", measure(q2))
+`,
   },
   {
-    id: 'state-debug',
+    id: 'bell-debug',
     title: 'Bell Pair Inspection',
     description: "Use state_result() to inspect the quantum state mid-circuit. Guppy's equivalent of print() debugging.",
     tags: ['debugging', 'statevector'],
@@ -196,7 +191,7 @@ main.check()`,
     source: `from guppylang import guppy
 from guppylang.std.quantum import qubit, h, cx, measure
 from guppylang.std.debug import state_result
-from guppylang.std.builtins import result as guppy_result
+from guppylang.std.builtins import result
 
 @guppy
 def main() -> None:
@@ -221,10 +216,9 @@ def main() -> None:
     cx(q0, q1)
     state_result("3. Bell state", q0, q1)    # (|00⟩ + |11⟩)/√2 — maximally entangled
 
-    guppy_result("m0", measure(q0))
-    guppy_result("m1", measure(q1))
-
-main.check()`,
+    result("m0", measure(q0))
+    result("m1", measure(q1))
+`,
   },
   {
     id: 'teleport-debug',
@@ -280,8 +274,7 @@ def main() -> None:
     # tgt now holds the teleported |+> state
     state_result("4. After correction (tgt only)", tgt)
     result("tgt", measure(tgt))
-
-main.check()`,
+`,
   },
   {
     id: 'ghz-debug',
@@ -323,8 +316,7 @@ def main() -> None:
     result("q0", measure(q0))
     result("q1", measure(q1))
     result("q2", measure(q2))
-
-main.check()`,
+`,
   },
   {
     id: 'deutsch-debug',
@@ -367,8 +359,7 @@ def main() -> None:
 
     result("result", measure(q))
     result("anc", measure(anc))
-
-main.check()`,
+`,
   },
   {
     id: 'qec-debug',
@@ -428,7 +419,6 @@ def main() -> None:
     result("q0", measure(q0))
     result("q1", measure(q1))
     result("q2", measure(q2))
-
-main.check()`,
+`,
   },
 ];

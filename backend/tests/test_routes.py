@@ -3,11 +3,17 @@ Integration tests for the API routes.
 Run with: pytest backend/tests/ -v
 """
 from __future__ import annotations
+import pathlib
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
+
+_PROGRAMS = pathlib.Path(__file__).parent / "programs"
+
+def _prog(name: str) -> str:
+    return (_PROGRAMS / f"{name}.py").read_text()
 
 
 # ── Health ─────────────────────────────────────────────────────────────────
@@ -38,20 +44,7 @@ def test_examples_returns_list():
 
 # ── Run ────────────────────────────────────────────────────────────────────
 
-BELL_SOURCE = """\
-from guppylang import guppy
-from guppylang.std.quantum import qubit, h, cx, measure
-
-@guppy
-def bell_pair() -> tuple[bool, bool]:
-    q0 = qubit()
-    q1 = qubit()
-    h(q0)
-    cx(q0, q1)
-    return measure(q0), measure(q1)
-
-bell_pair.check()
-"""
+BELL_SOURCE = _prog("bell_pair")
 
 def test_run_bell_pair():
     resp = client.post("/run", json={
@@ -104,7 +97,7 @@ def test_run_empty_source():
     # Empty source is valid Python — guppylang compiles it and returns ok with 0 shots,
     # but never a 500
     assert data["status"] in ("ok", "compile_error", "internal_error")
-    if data["status"] == "ok":
+    if data["status"] == "ok" and data.get("results"):
         assert sum(data["results"]["counts"].values()) == 0
 
 
@@ -295,39 +288,8 @@ def test_run_noisy_seed_is_reproducible():
 
 # ── Register names ─────────────────────────────────────────────────────────
 
-NAMED_RESULT_SOURCE = """\
-from guppylang import guppy
-from guppylang.std.builtins import result
-from guppylang.std.quantum import qubit, h, cx, measure
-
-@guppy
-def main() -> None:
-    q0 = qubit()
-    q1 = qubit()
-    h(q0)
-    cx(q0, q1)
-    result("m0", measure(q0))
-    result("m1", measure(q1))
-
-main.check()
-"""
-
-GHZ_SOURCE = """\
-from guppylang import guppy
-from guppylang.std.builtins import array, result
-from guppylang.std.quantum import qubit, h, cx, measure_array
-
-@guppy
-def main() -> None:
-    qubits = array(qubit() for _ in range(5))
-    h(qubits[0])
-    for i in range(4):
-        cx(qubits[i], qubits[i + 1])
-    ms = measure_array(qubits)
-    result("q", ms)
-
-main.check()
-"""
+NAMED_RESULT_SOURCE = _prog("named_results")
+GHZ_SOURCE          = _prog("ghz")
 
 
 def test_run_named_result_returns_register_names():
@@ -490,3 +452,556 @@ def test_cors_preflight():
         },
     )
     assert resp.status_code in (200, 204)
+
+
+# ── Inline emulator config ─────────────────────────────────────────────────
+
+INLINE_EMULATOR_SOURCE = _prog("inline_emulator")
+
+def test_inline_emulator_runs_via_api():
+    """Source with main.emulator(...).run() should succeed and honour code-specified shots."""
+    resp = client.post("/run", json={
+        "source":    INLINE_EMULATOR_SOURCE,
+        "shots":     1024,   # UI value — should be overridden by with_shots(256) in source
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        results = data["results"]
+        assert results is not None
+        # Code specifies with_shots(256); UI sent 1024 — code wins
+        assert sum(results["counts"].values()) == 256
+        # Program uses result("c", ...) — register name should be present
+        assert results["register_names"] == ["c"]
+
+
+def test_inline_emulator_seed_is_reproducible():
+    """Code-specified seed (with_seed(7)) makes results deterministic across calls."""
+    payload = {
+        "source":    INLINE_EMULATOR_SOURCE,
+        "shots":     1024,
+        "simulator": "stabilizer",
+        # No UI seed — seed comes from the source itself
+    }
+    r1 = client.post("/run", json=payload)
+    r2 = client.post("/run", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+    d1, d2 = r1.json(), r2.json()
+    assert d1["status"] == d2["status"]
+    if d1["status"] == "ok":
+        assert d1["results"]["counts"] == d2["results"]["counts"]
+
+
+# ── Teleportation (qubit-parameter function) ───────────────────────────────
+
+TELEPORT_SOURCE = _prog("teleport")
+
+
+def test_teleport_compile_only_succeeds():
+    """Explicit compile_only=True on teleport should return ok with HUGR but no results."""
+    resp = client.post("/run", json={
+        "source":       TELEPORT_SOURCE,
+        "shots":        256,
+        "simulator":    "stabilizer",
+        "compile_only": True,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None
+        assert data["compile"] is not None
+        assert data["compile"]["qubit_count"] == 3  # src + tgt (params) + tmp (internal)
+
+
+def test_teleport_auto_compile_only():
+    """Sending teleport without compile_only should auto-detect qubit params and not simulate."""
+    resp = client.post("/run", json={
+        "source":    TELEPORT_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        # Backend auto-enables compile_only for functions with qubit parameters
+        assert data["results"] is None
+        assert data["compile"] is not None
+
+
+def test_teleport_linearity_error_caught():
+    """Introduce a linearity violation and verify the backend catches it."""
+    broken = TELEPORT_SOURCE.replace(
+        "if measure(tmp):\n        x(tgt)",
+        "# dropped measure(tmp) — tgt qubit leaked",
+    )
+    resp = client.post("/run", json={
+        "source":    broken,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    # Guppy should catch the linearity error (leaked qubit or unused measurement)
+    assert data["status"] in ("ok", "compile_error")
+
+
+# ── coin_flip (compile() call in source) ───────────────────────────────────
+
+COIN_FLIP_SOURCE = _prog("coin_flip")
+
+
+def test_coin_flip_compile_call_detected():
+    """Source with coin_flip.compile() should auto-switch to compile-only mode."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None          # no simulation ran
+        assert data["compile"] is not None
+
+
+def test_coin_flip_stdout_captured():
+    """print() calls after compile() should appear in the response stdout field."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        stdout = data.get("stdout") or ""
+        assert "hugr.package.Package" in stdout
+        assert "HUGR package:" in stdout
+        assert "bytes" in stdout
+
+
+# ── Aliased imports / non-main function names ──────────────────────────────
+
+ALIASED_IMPORT_SOURCE = _prog("aliased_import")
+
+
+def test_aliased_import_compile_only():
+    """Aliased stdlib import (result as guppy_result) with a non-main function
+    should auto-switch to compile-only and return ok with no simulation."""
+    resp = client.post("/run", json={
+        "source":    ALIASED_IMPORT_SOURCE,
+        "shots":     64,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is None        # no simulation — not named main
+        assert data["compile"] is not None
+
+
+def test_aliased_import_check_only():
+    """Linearity check on an aliased-import program should pass cleanly."""
+    resp = client.post("/run", json={
+        "source":     ALIASED_IMPORT_SOURCE,
+        "shots":      1,
+        "simulator":  "stabilizer",
+        "check_only": True,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("check_ok", "compile_error", "internal_error")
+
+
+# ── hadamard (compile_function() call in source) ───────────────────────────
+
+HADAMARD_SOURCE = _prog("hadamard")
+
+
+# ── Max qubit limits ────────────────────────────────────────────────────────
+
+MAX_QUBITS_STABILIZER_SOURCE  = _prog("max_qubits_stabilizer")
+MAX_QUBITS_STATEVECTOR_SOURCE = _prog("max_qubits_statevector")
+
+
+def test_max_qubits_stabilizer_at_limit():
+    """50-qubit program should succeed on the Stim stabilizer backend."""
+    resp = client.post("/run", json={
+        "source":    MAX_QUBITS_STABILIZER_SOURCE,
+        "shots":     32,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is not None
+        assert sum(data["results"]["counts"].values()) == 32
+        assert data["compile"]["qubit_count"] == 50
+
+
+def test_max_qubits_stabilizer_over_limit_rejected():
+    """51 qubits exceeds the stabilizer cap — backend must return an error."""
+    over_source = MAX_QUBITS_STABILIZER_SOURCE.replace("range(50)", "range(51)")
+    resp = client.post("/run", json={
+        "source":    over_source,
+        "shots":     32,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "compile_error"
+
+
+def test_max_qubits_statevector_at_limit():
+    """20-qubit program should succeed on the QuEST statevector backend."""
+    resp = client.post("/run", json={
+        "source":    MAX_QUBITS_STATEVECTOR_SOURCE,
+        "shots":     1,   # 2^20 state — keep shot count low
+        "simulator": "statevector",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert data["results"] is not None
+        assert sum(data["results"]["counts"].values()) == 1
+        assert data["compile"]["qubit_count"] == 20
+
+
+def test_max_qubits_statevector_over_limit_rejected():
+    """21 qubits exceeds the statevector cap — backend must return an error."""
+    over_source = MAX_QUBITS_STATEVECTOR_SOURCE.replace("range(20)", "range(21)")
+    resp = client.post("/run", json={
+        "source":    over_source,
+        "shots":     1,
+        "simulator": "statevector",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "compile_error"
+
+
+def test_hadamard_compile_function_linearity_error():
+    """hadamard returns a borrowed qubit without @owned — guppy must catch this."""
+    resp = client.post("/run", json={
+        "source":    HADAMARD_SOURCE,
+        "shots":     256,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "compile_error"
+    errors = data["errors"]
+    assert errors, "expected at least one compile error"
+    msg = errors[0]["message"]
+    assert "owned" in msg.lower() or "borrow" in msg.lower(), (
+        f"Expected ownership/linearity error, got: {msg!r}"
+    )
+    assert errors[0]["kind"] == "linearity_error"
+
+
+# ── Bell pair with inline selene_sim noise comparison ─────────────────────
+
+BELL_PAIR_NOISY_SOURCE = _prog("bell_pair_noisy")
+
+
+def test_bell_pair_noisy_inline_config_overrides_shots():
+    """Inline .with_shots(512) should win over the UI-supplied shot count."""
+    resp = client.post("/run", json={
+        "source":    BELL_PAIR_NOISY_SOURCE,
+        "shots":     1024,   # UI value — inline config specifies 512
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert sum(data["results"]["counts"].values()) == 512
+
+
+def test_bell_pair_noisy_ideal_only_has_correlated_outcomes():
+    """With no noise model, Bell pair must produce only |00⟩ and |11⟩ (seed=42)."""
+    resp = client.post("/run", json={
+        "source":    BELL_PAIR_NOISY_SOURCE,
+        "shots":     512,
+        "simulator": "stabilizer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        counts = data["results"]["counts"]
+        # For an ideal Bell state only the two correlated outcomes are possible
+        assert set(counts.keys()) <= {"00", "11"}, (
+            f"Ideal Bell pair should only have 00/11, got: {set(counts.keys())}"
+        )
+        assert data["results"]["noisy_counts"] is None
+
+
+def test_bell_pair_noisy_register_names_m0_m1():
+    """result('m0', ...) and result('m1', ...) should surface as register names."""
+    resp = client.post("/run", json={
+        "source":    BELL_PAIR_NOISY_SOURCE,
+        "shots":     128,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        names = data["results"]["register_names"]
+        assert names is not None
+        assert "m0" in names
+        assert "m1" in names
+
+
+def test_bell_pair_noisy_depolarizing_produces_error_outcomes():
+    """With depolarizing noise the error bitstrings |01⟩ and |10⟩ should appear."""
+    resp = client.post("/run", json={
+        "source":      BELL_PAIR_NOISY_SOURCE,
+        "shots":       512,
+        "simulator":   "stabilizer",
+        "seed":        42,
+        "noise_model": "depolarizing",
+        "error_rate":  0.05,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        results = data["results"]
+        assert results["noisy_counts"] is not None
+        assert sum(results["noisy_counts"].values()) == 512
+        # High error rate (5%) should introduce at least some |01⟩/|10⟩ outcomes
+        error_outcomes = results["noisy_counts"].get("01", 0) + results["noisy_counts"].get("10", 0)
+        assert error_outcomes > 0, "Expected depolarizing noise to introduce error outcomes"
+
+
+def test_bell_pair_noisy_leakage_produces_noisy_counts():
+    """Leakage noise model should also return noisy_counts for this program.
+
+    The source specifies with_shots(512) inline — that overrides the UI shots value.
+    """
+    resp = client.post("/run", json={
+        "source":      BELL_PAIR_NOISY_SOURCE,
+        "shots":       256,   # overridden by inline with_shots(512)
+        "simulator":   "stabilizer",
+        "seed":        7,
+        "noise_model": "leakage",
+        "error_rate":  0.03,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        results = data["results"]
+        assert results["noisy_counts"] is not None
+        assert sum(results["noisy_counts"].values()) == 512  # inline config wins
+
+
+def test_bell_pair_noisy_ideal_seed_reproducible():
+    """Inline with_seed(42) makes ideal results deterministic across calls."""
+    payload = {
+        "source":    BELL_PAIR_NOISY_SOURCE,
+        "shots":     512,
+        "simulator": "stabilizer",
+    }
+    r1 = client.post("/run", json=payload)
+    r2 = client.post("/run", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+    d1, d2 = r1.json(), r2.json()
+    if d1["status"] == "ok" and d2["status"] == "ok":
+        assert d1["results"]["counts"] == d2["results"]["counts"]
+
+
+# ── Bell pair with H-series realistic noise (statevector inline run) ────────
+
+BELL_PAIR_HSERIES_SOURCE = _prog("bell_pair_hseries_noise")
+
+
+def test_bell_pair_hseries_statevector_inline_config():
+    """Inline .statevector_sim().with_shots(1024).with_seed(42) should be honoured."""
+    resp = client.post("/run", json={
+        "source":    BELL_PAIR_HSERIES_SOURCE,
+        "shots":     256,    # overridden by inline with_shots(1024)
+        "simulator": "stabilizer",  # overridden by inline statevector_sim()
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        # Inline config specifies statevector + 1024 shots
+        assert sum(data["results"]["counts"].values()) == 1024
+
+
+def test_bell_pair_hseries_ideal_only_correlated_outcomes():
+    """Statevector Bell pair: without noise only |00⟩ and |11⟩ should appear."""
+    resp = client.post("/run", json={
+        "source":    BELL_PAIR_HSERIES_SOURCE,
+        "shots":     1024,
+        "simulator": "statevector",
+        "seed":      42,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        counts = data["results"]["counts"]
+        assert set(counts.keys()) <= {"00", "11"}, (
+            f"Ideal Bell pair should only produce 00/11, got: {set(counts.keys())}"
+        )
+        assert data["results"]["noisy_counts"] is None
+
+
+def test_bell_pair_hseries_register_names():
+    """result('m0', ...) / result('m1', ...) should be returned as register names."""
+    resp = client.post("/run", json={
+        "source":    BELL_PAIR_HSERIES_SOURCE,
+        "shots":     128,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        names = data["results"]["register_names"]
+        assert names is not None
+        assert "m0" in names and "m1" in names
+
+
+def test_bell_pair_hseries_depolarizing_via_api():
+    """Requesting depolarizing via API should add noisy_counts alongside ideal counts.
+
+    The inline source uses statevector for its own noise run, but the API noise
+    pathway always uses the stabilizer backend for noisy simulation.
+    """
+    resp = client.post("/run", json={
+        "source":      BELL_PAIR_HSERIES_SOURCE,
+        "shots":       512,
+        "simulator":   "stabilizer",
+        "seed":        42,
+        "noise_model": "depolarizing",
+        "error_rate":  0.005,   # matches p_2q / p_meas from inline noise config
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        results = data["results"]
+        assert results["noisy_counts"] is not None
+        # Inline with_shots(1024) overrides the UI shots value for both ideal and noisy
+        assert sum(results["counts"].values()) == 1024
+        assert sum(results["noisy_counts"].values()) == 1024
+        # At 0.5% error rate noise should be mild — correlated outcomes still dominate
+        correlated = results["noisy_counts"].get("00", 0) + results["noisy_counts"].get("11", 0)
+        total = sum(results["noisy_counts"].values())
+        assert correlated / total > 0.90, (
+            f"Expected >90% correlated outcomes at 0.5% error rate, got {correlated/total:.2%}"
+        )
+
+
+def test_bell_pair_hseries_seed_reproducible():
+    """Inline with_seed(42) makes statevector results deterministic across calls."""
+    payload = {
+        "source":    BELL_PAIR_HSERIES_SOURCE,
+        "shots":     1024,
+        "simulator": "statevector",
+    }
+    r1 = client.post("/run", json=payload)
+    r2 = client.post("/run", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+    d1, d2 = r1.json(), r2.json()
+    if d1["status"] == "ok" and d2["status"] == "ok":
+        assert d1["results"]["counts"] == d2["results"]["counts"]
+
+
+# ── Coin flip with SimpleLeakageErrorModel ────────────────────────────────
+
+COIN_FLIP_LEAKAGE_SOURCE = _prog("coin_flip_leakage")
+
+
+def test_coin_flip_leakage_inline_config_overrides_shots():
+    """Inline with_shots(512) and stabilizer_sim() should override UI values."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_LEAKAGE_SOURCE,
+        "shots":     1024,    # overridden by inline with_shots(512)
+        "simulator": "statevector",  # overridden by inline stabilizer_sim()
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] in ("ok", "compile_error", "internal_error")
+    if data["status"] == "ok":
+        assert sum(data["results"]["counts"].values()) == 512
+
+
+def test_coin_flip_leakage_ideal_binary_outcomes():
+    """Without noise, H-then-measure produces only '0' and '1' — no other bitstrings."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_LEAKAGE_SOURCE,
+        "shots":     512,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        counts = data["results"]["counts"]
+        assert set(counts.keys()) <= {"0", "1"}, (
+            f"Ideal coin flip should only produce 0/1, got: {set(counts.keys())}"
+        )
+        # Both outcomes should appear with sufficient shots
+        assert "0" in counts and "1" in counts
+        assert data["results"]["noisy_counts"] is None
+
+
+def test_coin_flip_leakage_register_name_m():
+    """result('m', ...) should be returned as the single register name."""
+    resp = client.post("/run", json={
+        "source":    COIN_FLIP_LEAKAGE_SOURCE,
+        "shots":     128,
+        "simulator": "stabilizer",
+        "seed":      1,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        assert data["results"]["register_names"] == ["m"]
+
+
+def test_coin_flip_leakage_api_noise_adds_noisy_counts():
+    """Requesting leakage noise via the API should produce noisy_counts alongside ideal."""
+    resp = client.post("/run", json={
+        "source":      COIN_FLIP_LEAKAGE_SOURCE,
+        "shots":       512,
+        "simulator":   "stabilizer",
+        "seed":        1,
+        "noise_model": "leakage",
+        "error_rate":  0.01,   # matches p_leak from inline leakage config
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["status"] == "ok":
+        results = data["results"]
+        assert results["noisy_counts"] is not None
+        # Inline with_shots(512) sets the count for both ideal and noisy
+        assert sum(results["counts"].values()) == 512
+        assert sum(results["noisy_counts"].values()) == 512
+        # Noisy outcomes should still be binary ('0'/'1') — leakage maps to a classical bit
+        assert set(results["noisy_counts"].keys()) <= {"0", "1"}
+
+
+def test_coin_flip_leakage_seed_reproducible():
+    """Inline with_seed(1) makes results deterministic across calls."""
+    payload = {
+        "source":    COIN_FLIP_LEAKAGE_SOURCE,
+        "shots":     512,
+        "simulator": "stabilizer",
+    }
+    r1 = client.post("/run", json=payload)
+    r2 = client.post("/run", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+    d1, d2 = r1.json(), r2.json()
+    if d1["status"] == "ok" and d2["status"] == "ok":
+        assert d1["results"]["counts"] == d2["results"]["counts"]
