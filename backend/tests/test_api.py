@@ -187,9 +187,9 @@ async def test_compiler_rejects_unknown_version():
     from app.models import ErrorKind
 
     result = await compile_and_simulate("x", shots=64, simulator="stabilizer", version="0.0.0.not.real")
-    assert isinstance(result, list)
-    assert result[0].kind == ErrorKind.internal_error
-    assert "unsupported" in result[0].message.lower()
+    assert result.errors
+    assert result.errors[0].kind == ErrorKind.internal_error
+    assert "unsupported" in result.errors[0].message.lower()
 
 
 def test_worker_command_uses_sys_executable_for_none():
@@ -391,9 +391,8 @@ async def test_compiler_passes_noise_params():
     assert payload["error_rate"] == 0.01
 
     # Verify noisy_counts surfaced in the result
-    assert not isinstance(result, list)
-    compile_ok, sim_ok = result
-    assert sim_ok.noisy_counts == {"00": 60, "01": 4}
+    assert not result.errors
+    assert result.results.noisy_counts == {"00": 60, "01": 4}
 
 
 @pytest.mark.asyncio
@@ -416,8 +415,8 @@ async def test_compiler_no_noise_model_sends_none():
     payload = _json.loads(mock_sub.call_args.kwargs["input_data"])
     assert payload["noise_model"] is None
 
-    compile_ok, sim_ok = result
-    assert sim_ok.noisy_counts is None
+    assert not result.errors
+    assert result.results.noisy_counts is None
 
 
 # ── Compiler unit tests (error paths) ─────────────────────────────────────
@@ -432,9 +431,9 @@ async def test_compiler_timeout_returns_error():
     timed_out = SubprocessResult(stdout="", stderr="timed out", returncode=-1, timed_out=True)
     with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=timed_out)):
         result = await compile_and_simulate("x", shots=1, simulator="stabilizer")
-    assert isinstance(result, list)
-    assert result[0].kind == ErrorKind.internal_error
-    assert "timed out" in result[0].message.lower()
+    assert result.errors
+    assert result.errors[0].kind == ErrorKind.internal_error
+    assert "timed out" in result.errors[0].message.lower()
 
 
 @pytest.mark.asyncio
@@ -447,8 +446,8 @@ async def test_compiler_empty_stdout_returns_error():
     empty = SubprocessResult(stdout="", stderr="something crashed", returncode=1, timed_out=False)
     with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=empty)):
         result = await compile_and_simulate("x", shots=1, simulator="stabilizer")
-    assert isinstance(result, list)
-    assert result[0].kind == ErrorKind.internal_error
+    assert result.errors
+    assert result.errors[0].kind == ErrorKind.internal_error
 
 
 @pytest.mark.asyncio
@@ -461,8 +460,8 @@ async def test_compiler_bad_json_returns_error():
     bad_json = SubprocessResult(stdout="not json {{", stderr="", returncode=0, timed_out=False)
     with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=bad_json)):
         result = await compile_and_simulate("x", shots=1, simulator="stabilizer")
-    assert isinstance(result, list)
-    assert result[0].kind == ErrorKind.internal_error
+    assert result.errors
+    assert result.errors[0].kind == ErrorKind.internal_error
 
 
 # ── _extract_register_names unit tests ────────────────────────────────────────
@@ -595,9 +594,8 @@ async def test_compiler_passes_register_names_through():
     with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=worker_ok)):
         result = await compile_and_simulate("x", shots=1024, simulator="stabilizer")
 
-    assert not isinstance(result, list)
-    _, sim_ok = result
-    assert sim_ok.register_names == names
+    assert not result.errors
+    assert result.results.register_names == names
 
 
 @pytest.mark.asyncio
@@ -619,6 +617,5 @@ async def test_compiler_register_names_none_when_absent():
     with patch("app.compiler.run_subprocess", new=AsyncMock(return_value=worker_ok)):
         result = await compile_and_simulate("x", shots=1024, simulator="stabilizer")
 
-    assert not isinstance(result, list)
-    _, sim_ok = result
-    assert sim_ok.register_names is None
+    assert not result.errors
+    assert result.results.register_names is None
