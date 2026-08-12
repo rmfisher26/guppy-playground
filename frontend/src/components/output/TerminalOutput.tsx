@@ -5,7 +5,7 @@ import type { RunState } from '../../lib/types';
 export default function TerminalOutput() {
   const { runState, simulator, source } = usePlaygroundStore();
   return (
-    <div style={{
+    <div data-testid="terminal-output" style={{
       flex: 1, padding: 16, fontFamily: 'var(--font-mono)',
       fontSize: 12, lineHeight: 1.7, overflowY: 'auto',
       background: '#0d1117',

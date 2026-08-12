@@ -190,5 +190,5 @@ export default function GuppyEditor({ onReady }: GuppyEditorProps) {
     return () => { view.destroy(); viewRef.current = null; };
   }, []);
 
-  return <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', height: '100%' }} />;
+  return <div ref={containerRef} data-testid="guppy-editor" style={{ flex: 1, overflow: 'hidden', height: '100%' }} />;
 }

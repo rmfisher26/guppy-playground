@@ -1,0 +1,5 @@
+# Defaults for a local `docker compose up` stack.
+# Override at invocation time, e.g.:
+#   robot --variable API_URL:http://localhost:9000 robot/api/
+BASE_URL: http://localhost:4321
+API_URL: http://localhost:8000

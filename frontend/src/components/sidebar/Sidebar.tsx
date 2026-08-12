@@ -185,6 +185,7 @@ function WorkspaceItem({
 
   return (
     <div
+      data-testid="sidebar-workspace-item"
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -264,6 +265,7 @@ function ExampleItem({
 
   return (
     <div
+      data-testid={`example-item-${example.id}`}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}

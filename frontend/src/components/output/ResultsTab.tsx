@@ -109,7 +109,7 @@ export default function ResultsTab() {
     chartLayout === 'vertical' ? [0, 3, 3, 0] : [3, 3, 0, 0];
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+    <div data-testid="results-tab" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
       {/* Section header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
@@ -324,7 +324,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function EmptyState({ icon, title, desc }: { icon: string; title: string; desc: React.ReactNode }) {
   return (
-    <div style={{
+    <div data-testid="results-empty" style={{
       flex: 1, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       gap: 10, color: 'var(--text-muted)', padding: 24, textAlign: 'center',

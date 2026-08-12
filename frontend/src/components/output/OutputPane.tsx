@@ -88,6 +88,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
           {allTabs.map(tab => (
             <TabButton
               key={tab.id}
+              testId={`output-tab-${tab.id}`}
               label={tab.label}
               active={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -135,6 +136,7 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
           {topTabs.map(tab => (
             <TabButton
               key={tab.id}
+              testId={`output-tab-${tab.id}`}
               label={tab.label}
               active={topActiveTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -185,13 +187,14 @@ export default function OutputPane({ isMobile = false }: { isMobile?: boolean })
 }
 
 function TabButton({
-  label, active, onClick, asLabel, dot,
+  label, active, onClick, asLabel, dot, testId,
 }: {
-  label: string; active: boolean; onClick: () => void; asLabel?: boolean; dot?: boolean;
+  label: string; active: boolean; onClick: () => void; asLabel?: boolean; dot?: boolean; testId?: string;
 }) {
   const [hovered, setHovered] = React.useState(false);
   return (
     <button
+      data-testid={testId}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -250,7 +253,11 @@ function StatusBar({ statusInfo, runState }: { statusInfo: ReturnType<typeof get
       padding: '0 14px', gap: 8, flexShrink: 0,
     }}>
       <StatusDot color={statusInfo.dotColor} pulse={statusInfo.pulse} />
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+      <span
+        data-testid="run-status"
+        data-status={runState.status}
+        style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}
+      >
         {displayText}
       </span>
       <div style={{ flex: 1 }} />

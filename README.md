@@ -49,6 +49,22 @@ make test-backend-unit    # unit tests only (models, sandbox, compiler logic)
 make test-backend-routes  # route integration tests only
 ```
 
+### Acceptance tests (Robot Framework)
+
+A separate suite in `robot/` exercises the deployed stack itself — real HTTP against the
+backend and a real browser against the frontend — rather than testing in-process like the
+pytest suite above. Requires the stack to already be running:
+
+```bash
+make dev            # in one terminal
+make test-robot      # in another — runs both API and UI suites
+make test-robot-api  # API suite only
+make test-robot-ui   # UI suite only
+```
+
+First run creates a venv under `robot/.venv` and downloads Playwright's browser binaries
+(`rfbrowser init`). Results land in `robot/results/log.html`.
+
 ---
 
 ## Make commands
@@ -60,6 +76,7 @@ make test-backend-routes  # route integration tests only
 | `make backend`         | Backend dev server only                           |
 | `make build`           | Production frontend build                         |
 | `make test-backend`    | Create venv (if needed) and run all backend tests |
+| `make test-robot`      | Run the Robot Framework acceptance suite (API + UI) against a running stack |
 | `make install`         | Install frontend dependencies                     |
 | `make clean`           | Remove build artifacts and caches                 |
 
@@ -112,6 +129,11 @@ guppy-playground/
 │   ├── pytest.ini
 │   ├── .env.example
 │   └── Dockerfile
+├── robot/                       # Robot Framework acceptance suite (deployed-stack tests)
+│   ├── api/                     # RequestsLibrary — real HTTP against the backend
+│   ├── ui/                      # Browser library — real browser against the frontend
+│   ├── resources/               # Shared session/page-object keywords
+│   └── variables/common.yaml    # BASE_URL / API_URL defaults
 ├── .github/
 │   └── workflows/
 │       ├── deploy-backend.yml   # Cloud Run deploy on push to main

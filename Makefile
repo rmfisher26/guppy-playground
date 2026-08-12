@@ -1,6 +1,7 @@
 # ── Guppy Playground Makefile ──────────────────────────────────────────────
 .PHONY: dev build backend frontend test test-backend test-backend-unit \
         test-backend-routes backend-install install clean \
+        robot-install test-robot test-robot-api test-robot-ui \
         tf-apply tf-teardown tf-rebuild tf-wif-restore \
         push-backend push-frontend push-images
 
@@ -9,10 +10,19 @@ PYTHON  = $(VENV)/bin/python
 PYTEST  = $(VENV)/bin/pytest
 UVICORN = $(VENV)/bin/uvicorn
 
+ROBOT_VENV   = $(CURDIR)/robot/.venv
+ROBOT_PYTHON = $(ROBOT_VENV)/bin/python
+ROBOT        = $(ROBOT_VENV)/bin/robot
+
 # Create the backend venv + install deps if the venv doesn't exist yet
 $(PYTHON):
 	uv venv $(VENV)
 	uv pip install -r backend/requirements.txt --python $(PYTHON)
+
+# Create the robot venv + install deps if the venv doesn't exist yet
+$(ROBOT_PYTHON):
+	uv venv $(ROBOT_VENV)
+	uv pip install -r robot/requirements.txt --python $(ROBOT_PYTHON)
 
 # ── Infrastructure ─────────────────────────────────────────────────────────
 GCP_PROJECT  = guppyfisher
@@ -105,6 +115,28 @@ test-backend-unit: $(PYTHON)
 test-backend-routes: $(PYTHON)
 	cd backend && $(PYTEST) tests/test_routes.py -v
 
+# Robot Framework acceptance suite — assumes `make dev` / `docker compose up` is already
+# running (frontend on :4321, backend on :8000). rfbrowser init fetches the Playwright
+# browser binaries the Browser library needs; it's a separate step from pip install
+# because a missing browser only fails at test-run time, not install time.
+robot-install: $(ROBOT_PYTHON)
+	$(ROBOT_VENV)/bin/rfbrowser init
+
+test-robot-api: robot-install
+	$(ROBOT) --variable API_URL:http://localhost:8000 \
+	         --outputdir robot/results \
+	         robot/api/
+
+test-robot-ui: robot-install
+	$(ROBOT) --variable BASE_URL:http://localhost:4321 --variable API_URL:http://localhost:8000 \
+	         --outputdir robot/results \
+	         robot/ui/
+
+test-robot: robot-install
+	$(ROBOT) --variable BASE_URL:http://localhost:4321 --variable API_URL:http://localhost:8000 \
+	         --outputdir robot/results \
+	         robot/
+
 # ── Health check ───────────────────────────────────────────────────────────
 health:
 	curl -s http://localhost:8000/health | python3 -m json.tool
@@ -112,4 +144,4 @@ health:
 # ── Clean ──────────────────────────────────────────────────────────────────
 clean:
 	rm -rf dist/ .astro/ backend/__pycache__ backend/app/__pycache__ \
-		backend/tests/__pycache__ backend/app/**/__pycache__
+		backend/tests/__pycache__ backend/app/**/__pycache__ robot/results

@@ -141,6 +141,7 @@ export default function Toolbar() {
         {/* Run split-button */}
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
           <button
+            data-testid="toolbar-primary-action"
             style={{
               ...btnBase,
               borderRadius: 'var(--radius-sm) 0 0 var(--radius-sm)',
@@ -592,10 +593,11 @@ function RunActionMenu({ isRunning, canRun, activeAction, onActionSelect }: {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const actions: { icon: React.ReactNode; title: string; description: string; code?: string; onClick: () => void; disabled: boolean }[] = [
+  const actions: { icon: React.ReactNode; title: string; testId: string; description: string; code?: string; onClick: () => void; disabled: boolean }[] = [
     {
       icon: <PlayIcon />,
       title: 'Run',
+      testId: 'toolbar-action-run',
       description: 'Compile and simulate on the quantum emulator using the shots and simulator settings. View measurement counts in the Results tab.',
       code: 'main.emulator(n_shots).run()',
       onClick: () => { onActionSelect('run'); setOpen(false); },
@@ -604,6 +606,7 @@ function RunActionMenu({ isRunning, canRun, activeAction, onActionSelect }: {
     {
       icon: <CompileIcon />,
       title: 'Compile to HUGR',
+      testId: 'toolbar-action-compile',
       description: 'Compile to the HUGR quantum intermediate representation and inspect in the HUGR tab.',
       code: 'main.compile()  /  fn.compile_function()',
       onClick: () => { onActionSelect('compile'); setOpen(false); },
@@ -612,6 +615,7 @@ function RunActionMenu({ isRunning, canRun, activeAction, onActionSelect }: {
     {
       icon: <CheckIcon />,
       title: 'Linearity Check',
+      testId: 'toolbar-action-check',
       description: 'Type-check the program for qubit linearity violations — each qubit must be used exactly once with no leaks or double-use. No simulation runs.',
       code: 'main.check()',
       onClick: () => { onActionSelect('check'); setOpen(false); },
@@ -622,6 +626,7 @@ function RunActionMenu({ isRunning, canRun, activeAction, onActionSelect }: {
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
+        data-testid="toolbar-action-menu-toggle"
         onClick={() => setOpen(o => !o)}
         style={{
           height: 28, width: 22, padding: 0,
@@ -650,6 +655,7 @@ function RunActionMenu({ isRunning, canRun, activeAction, onActionSelect }: {
               key={action.title}
               icon={action.icon}
               title={action.title}
+              testId={action.testId}
               description={action.description}
               code={action.code}
               disabled={action.disabled}
@@ -663,9 +669,10 @@ function RunActionMenu({ isRunning, canRun, activeAction, onActionSelect }: {
   );
 }
 
-function ActionRow({ icon, title, description, code, disabled, onClick, isLast }: {
+function ActionRow({ icon, title, testId, description, code, disabled, onClick, isLast }: {
   icon: React.ReactNode;
   title: string;
+  testId: string;
   description: string;
   code?: string;
   disabled: boolean;
@@ -675,6 +682,7 @@ function ActionRow({ icon, title, description, code, disabled, onClick, isLast }
   const [hovered, setHovered] = useState(false);
   return (
     <button
+      data-testid={testId}
       onClick={disabled ? undefined : onClick}
       onMouseEnter={() => !disabled && setHovered(true)}
       onMouseLeave={() => setHovered(false)}

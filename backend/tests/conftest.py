@@ -3,6 +3,8 @@ from __future__ import annotations
 import pathlib
 import pytest
 
+# Also read directly by robot/resources/programs.resource's `Load Program` keyword —
+# if this moves, update that resource file too.
 PROGRAMS_DIR = pathlib.Path(__file__).parent / "programs"
 
 
